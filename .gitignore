@@ -1,0 +1,11 @@
+# Xcode
+DerivedData/
+xcuserdata/
+*.xcscmblueprint
+*.xcuserstate
+
+# Swift Package Manager
+.build/
+
+# Secrets
+Config/Secrets.xcconfig
