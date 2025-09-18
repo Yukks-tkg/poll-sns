@@ -1,0 +1,632 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0242C2442E7BBB3B0065FDEE /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0242C2422E7BBB3B0065FDEE /* Localizable.strings */; };
+		0242C2472E7BBF3C0065FDEE /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0242C2462E7BBF2C0065FDEE /* Localization.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0242C2182E7BAB320065FDEE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0242C2022E7BAB300065FDEE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0242C2092E7BAB300065FDEE;
+			remoteInfo = PollSNS;
+		};
+		0242C2222E7BAB320065FDEE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0242C2022E7BAB300065FDEE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0242C2092E7BAB300065FDEE;
+			remoteInfo = PollSNS;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0242C20A2E7BAB300065FDEE /* PollSNS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PollSNS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0242C2172E7BAB320065FDEE /* PollSNSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PollSNSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0242C2212E7BAB320065FDEE /* PollSNSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PollSNSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0242C2342E7BB8D00065FDEE /* .gitkeep */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitkeep; sourceTree = "<group>"; };
+		0242C2362E7BB8D00065FDEE /* .gitkeep */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitkeep; sourceTree = "<group>"; };
+		0242C2382E7BB8D00065FDEE /* .gitkeep */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitkeep; sourceTree = "<group>"; };
+		0242C23A2E7BB8D00065FDEE /* .gitkeep */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitkeep; sourceTree = "<group>"; };
+		0242C2432E7BBB3B0065FDEE /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		0242C2452E7BBDDE0065FDEE /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		0242C2462E7BBF2C0065FDEE /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		0242C20C2E7BAB300065FDEE /* PollSNS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PollSNS;
+			sourceTree = "<group>";
+		};
+		0242C21A2E7BAB320065FDEE /* PollSNSTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PollSNSTests;
+			sourceTree = "<group>";
+		};
+		0242C2242E7BAB320065FDEE /* PollSNSUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PollSNSUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0242C2072E7BAB300065FDEE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0242C2142E7BAB320065FDEE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0242C21E2E7BAB320065FDEE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0242C2012E7BAB300065FDEE = {
+			isa = PBXGroup;
+			children = (
+				0242C2352E7BB8D00065FDEE /* Config */,
+				0242C2372E7BB8D00065FDEE /* Resources */,
+				0242C2392E7BB8D00065FDEE /* Sources */,
+				0242C23B2E7BB8D00065FDEE /* Utils */,
+				0242C20C2E7BAB300065FDEE /* PollSNS */,
+				0242C21A2E7BAB320065FDEE /* PollSNSTests */,
+				0242C2242E7BAB320065FDEE /* PollSNSUITests */,
+				0242C20B2E7BAB300065FDEE /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		0242C20B2E7BAB300065FDEE /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0242C20A2E7BAB300065FDEE /* PollSNS.app */,
+				0242C2172E7BAB320065FDEE /* PollSNSTests.xctest */,
+				0242C2212E7BAB320065FDEE /* PollSNSUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		0242C2352E7BB8D00065FDEE /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				0242C2342E7BB8D00065FDEE /* .gitkeep */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		0242C2372E7BB8D00065FDEE /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				0242C2362E7BB8D00065FDEE /* .gitkeep */,
+				0242C2422E7BBB3B0065FDEE /* Localizable.strings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		0242C2392E7BB8D00065FDEE /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				0242C2382E7BB8D00065FDEE /* .gitkeep */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		0242C23B2E7BB8D00065FDEE /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				0242C2462E7BBF2C0065FDEE /* Localization.swift */,
+				0242C23A2E7BB8D00065FDEE /* .gitkeep */,
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0242C2092E7BAB300065FDEE /* PollSNS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0242C22B2E7BAB320065FDEE /* Build configuration list for PBXNativeTarget "PollSNS" */;
+			buildPhases = (
+				0242C2062E7BAB300065FDEE /* Sources */,
+				0242C2072E7BAB300065FDEE /* Frameworks */,
+				0242C2082E7BAB300065FDEE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				0242C20C2E7BAB300065FDEE /* PollSNS */,
+			);
+			name = PollSNS;
+			packageProductDependencies = (
+			);
+			productName = PollSNS;
+			productReference = 0242C20A2E7BAB300065FDEE /* PollSNS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		0242C2162E7BAB320065FDEE /* PollSNSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0242C22E2E7BAB320065FDEE /* Build configuration list for PBXNativeTarget "PollSNSTests" */;
+			buildPhases = (
+				0242C2132E7BAB320065FDEE /* Sources */,
+				0242C2142E7BAB320065FDEE /* Frameworks */,
+				0242C2152E7BAB320065FDEE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0242C2192E7BAB320065FDEE /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				0242C21A2E7BAB320065FDEE /* PollSNSTests */,
+			);
+			name = PollSNSTests;
+			packageProductDependencies = (
+			);
+			productName = PollSNSTests;
+			productReference = 0242C2172E7BAB320065FDEE /* PollSNSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		0242C2202E7BAB320065FDEE /* PollSNSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0242C2312E7BAB320065FDEE /* Build configuration list for PBXNativeTarget "PollSNSUITests" */;
+			buildPhases = (
+				0242C21D2E7BAB320065FDEE /* Sources */,
+				0242C21E2E7BAB320065FDEE /* Frameworks */,
+				0242C21F2E7BAB320065FDEE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0242C2232E7BAB320065FDEE /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				0242C2242E7BAB320065FDEE /* PollSNSUITests */,
+			);
+			name = PollSNSUITests;
+			packageProductDependencies = (
+			);
+			productName = PollSNSUITests;
+			productReference = 0242C2212E7BAB320065FDEE /* PollSNSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0242C2022E7BAB300065FDEE /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					0242C2092E7BAB300065FDEE = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					0242C2162E7BAB320065FDEE = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 0242C2092E7BAB300065FDEE;
+					};
+					0242C2202E7BAB320065FDEE = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 0242C2092E7BAB300065FDEE;
+					};
+				};
+			};
+			buildConfigurationList = 0242C2052E7BAB300065FDEE /* Build configuration list for PBXProject "PollSNS" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				ja,
+			);
+			mainGroup = 0242C2012E7BAB300065FDEE;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 0242C20B2E7BAB300065FDEE /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0242C2092E7BAB300065FDEE /* PollSNS */,
+				0242C2162E7BAB320065FDEE /* PollSNSTests */,
+				0242C2202E7BAB320065FDEE /* PollSNSUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0242C2082E7BAB300065FDEE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0242C2442E7BBB3B0065FDEE /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0242C2152E7BAB320065FDEE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0242C21F2E7BAB320065FDEE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0242C2062E7BAB300065FDEE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0242C2472E7BBF3C0065FDEE /* Localization.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0242C2132E7BAB320065FDEE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0242C21D2E7BAB320065FDEE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0242C2192E7BAB320065FDEE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
+			targetProxy = 0242C2182E7BAB320065FDEE /* PBXContainerItemProxy */;
+		};
+		0242C2232E7BAB320065FDEE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
+			targetProxy = 0242C2222E7BAB320065FDEE /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		0242C2422E7BBB3B0065FDEE /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				0242C2432E7BBB3B0065FDEE /* en */,
+				0242C2452E7BBDDE0065FDEE /* ja */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		0242C2292E7BAB320065FDEE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 2HNQAJKUD5;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		0242C22A2E7BAB320065FDEE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 2HNQAJKUD5;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		0242C22C2E7BAB320065FDEE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2HNQAJKUD5;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yuki.PollSNS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		0242C22D2E7BAB320065FDEE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2HNQAJKUD5;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yuki.PollSNS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		0242C22F2E7BAB320065FDEE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2HNQAJKUD5;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yuki.PollSNSTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PollSNS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PollSNS";
+			};
+			name = Debug;
+		};
+		0242C2302E7BAB320065FDEE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2HNQAJKUD5;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yuki.PollSNSTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PollSNS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PollSNS";
+			};
+			name = Release;
+		};
+		0242C2322E7BAB320065FDEE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2HNQAJKUD5;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yuki.PollSNSUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PollSNS;
+			};
+			name = Debug;
+		};
+		0242C2332E7BAB320065FDEE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2HNQAJKUD5;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yuki.PollSNSUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PollSNS;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0242C2052E7BAB300065FDEE /* Build configuration list for PBXProject "PollSNS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0242C2292E7BAB320065FDEE /* Debug */,
+				0242C22A2E7BAB320065FDEE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0242C22B2E7BAB320065FDEE /* Build configuration list for PBXNativeTarget "PollSNS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0242C22C2E7BAB320065FDEE /* Debug */,
+				0242C22D2E7BAB320065FDEE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0242C22E2E7BAB320065FDEE /* Build configuration list for PBXNativeTarget "PollSNSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0242C22F2E7BAB320065FDEE /* Debug */,
+				0242C2302E7BAB320065FDEE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0242C2312E7BAB320065FDEE /* Build configuration list for PBXNativeTarget "PollSNSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0242C2322E7BAB320065FDEE /* Debug */,
+				0242C2332E7BAB320065FDEE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0242C2022E7BAB300065FDEE /* Project object */;
+}
