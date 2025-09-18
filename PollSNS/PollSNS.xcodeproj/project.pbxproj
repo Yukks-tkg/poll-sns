@@ -39,6 +39,7 @@
 		0242C2432E7BBB3B0065FDEE /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		0242C2452E7BBDDE0065FDEE /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		0242C2462E7BBF2C0065FDEE /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
+		0242C2482E7BCC180065FDEE /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -112,6 +113,7 @@
 			isa = PBXGroup;
 			children = (
 				0242C2342E7BB8D00065FDEE /* .gitkeep */,
+				0242C2482E7BCC180065FDEE /* Secrets.xcconfig */,
 			);
 			path = Config;
 			sourceTree = "<group>";
