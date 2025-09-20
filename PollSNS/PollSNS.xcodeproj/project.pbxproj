@@ -40,7 +40,57 @@
 		0242C2452E7BBDDE0065FDEE /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		0242C2462E7BBF2C0065FDEE /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		0242C2482E7BCC180065FDEE /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
+		0242C24B2E7BDD0A0065FDEE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		0242C2522E7BE4B90065FDEE /* Exceptions for "PollSNSTests" folder in "PollSNSTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				PollSNSUITests/PollSNSUITests.swift,
+				PollSNSUITests/PollSNSUITestsLaunchTests.swift,
+			);
+			target = 0242C2162E7BAB320065FDEE /* PollSNSTests */;
+		};
+		0242C2532E7BE4B90065FDEE /* Exceptions for "PollSNSTests" folder in "PollSNSUITests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				PollSNSUITests/PollSNSUITests.swift,
+				PollSNSUITests/PollSNSUITestsLaunchTests.swift,
+			);
+			target = 0242C2202E7BAB320065FDEE /* PollSNSUITests */;
+		};
+		02F2CE3A2E7C66D100B080A7 /* Exceptions for "Views" folder in "PollSNS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				PollDetailView.swift,
+				PollTimelineView.swift,
+			);
+			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
+		};
+		02F2CE3C2E7C6B4500B080A7 /* Exceptions for "Models" folder in "PollSNS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Poll.swift,
+				PollOption.swift,
+			);
+			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
+		};
+		02F2CE3E2E7C6D0700B080A7 /* Exceptions for "API" folder in "PollSNS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				PollAPI.swift,
+			);
+			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
+		};
+		02F2CE402E7C6E2700B080A7 /* Exceptions for "Config" folder in "PollSNS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AppConfig.swift,
+			);
+			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0242C20C2E7BAB300065FDEE /* PollSNS */ = {
@@ -50,12 +100,43 @@
 		};
 		0242C21A2E7BAB320065FDEE /* PollSNSTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				0242C2522E7BE4B90065FDEE /* Exceptions for "PollSNSTests" folder in "PollSNSTests" target */,
+				0242C2532E7BE4B90065FDEE /* Exceptions for "PollSNSTests" folder in "PollSNSUITests" target */,
+			);
 			path = PollSNSTests;
 			sourceTree = "<group>";
 		};
-		0242C2242E7BAB320065FDEE /* PollSNSUITests */ = {
+		02F2CE302E7C2E3600B080A7 /* Models */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = PollSNSUITests;
+			exceptions = (
+				02F2CE3C2E7C6B4500B080A7 /* Exceptions for "Models" folder in "PollSNS" target */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		02F2CE332E7C2EF100B080A7 /* Config */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				02F2CE402E7C6E2700B080A7 /* Exceptions for "Config" folder in "PollSNS" target */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		02F2CE352E7C2FB600B080A7 /* API */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				02F2CE3E2E7C6D0700B080A7 /* Exceptions for "API" folder in "PollSNS" target */,
+			);
+			path = API;
+			sourceTree = "<group>";
+		};
+		02F2CE372E7C63D800B080A7 /* Views */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				02F2CE3A2E7C66D100B080A7 /* Exceptions for "Views" folder in "PollSNS" target */,
+			);
+			path = Views;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -88,13 +169,13 @@
 		0242C2012E7BAB300065FDEE = {
 			isa = PBXGroup;
 			children = (
+				0242C24B2E7BDD0A0065FDEE /* Info.plist */,
 				0242C2352E7BB8D00065FDEE /* Config */,
 				0242C2372E7BB8D00065FDEE /* Resources */,
 				0242C2392E7BB8D00065FDEE /* Sources */,
 				0242C23B2E7BB8D00065FDEE /* Utils */,
 				0242C20C2E7BAB300065FDEE /* PollSNS */,
 				0242C21A2E7BAB320065FDEE /* PollSNSTests */,
-				0242C2242E7BAB320065FDEE /* PollSNSUITests */,
 				0242C20B2E7BAB300065FDEE /* Products */,
 			);
 			sourceTree = "<group>";
@@ -130,6 +211,10 @@
 		0242C2392E7BB8D00065FDEE /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				02F2CE372E7C63D800B080A7 /* Views */,
+				02F2CE352E7C2FB600B080A7 /* API */,
+				02F2CE332E7C2EF100B080A7 /* Config */,
+				02F2CE302E7C2E3600B080A7 /* Models */,
 				0242C2382E7BB8D00065FDEE /* .gitkeep */,
 			);
 			path = Sources;
@@ -205,9 +290,6 @@
 			dependencies = (
 				0242C2232E7BAB320065FDEE /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				0242C2242E7BAB320065FDEE /* PollSNSUITests */,
-			);
 			name = PollSNSUITests;
 			packageProductDependencies = (
 			);
@@ -239,7 +321,7 @@
 				};
 			};
 			buildConfigurationList = 0242C2052E7BAB300065FDEE /* Build configuration list for PBXProject "PollSNS" */;
-			developmentRegion = en;
+			developmentRegion = ja;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
@@ -338,6 +420,7 @@
 /* Begin XCBuildConfiguration section */
 		0242C2292E7BAB320065FDEE /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0242C2482E7BCC180065FDEE /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -403,6 +486,7 @@
 		};
 		0242C22A2E7BAB320065FDEE /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0242C2482E7BCC180065FDEE /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -469,6 +553,7 @@
 				DEVELOPMENT_TEAM = 2HNQAJKUD5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "$(SRCROOT)/Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -498,6 +583,7 @@
 				DEVELOPMENT_TEAM = 2HNQAJKUD5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "$(SRCROOT)/Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
