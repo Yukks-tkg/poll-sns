@@ -5,6 +5,7 @@ struct Poll: Identifiable, Decodable {
     let question: String
     let category: String
     let created_at: String?  // とりあえず文字列で受ける（後でDateにする）
+    let like_count: Int?     // 人気順ビュー（polls_popular）でのみ返る想定
 
     // DB列名が同じなら CodingKeys は不要
 }

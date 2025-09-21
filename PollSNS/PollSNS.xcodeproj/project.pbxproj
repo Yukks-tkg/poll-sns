@@ -44,46 +44,32 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		0242C2522E7BE4B90065FDEE /* Exceptions for "PollSNSTests" folder in "PollSNSTests" target */ = {
+		02F2CE522E7E934D00B080A7 /* Exceptions for "Views" folder in "PollSNS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				PollSNSUITests/PollSNSUITests.swift,
-				PollSNSUITests/PollSNSUITestsLaunchTests.swift,
-			);
-			target = 0242C2162E7BAB320065FDEE /* PollSNSTests */;
-		};
-		0242C2532E7BE4B90065FDEE /* Exceptions for "PollSNSTests" folder in "PollSNSUITests" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				PollSNSUITests/PollSNSUITests.swift,
-				PollSNSUITests/PollSNSUITestsLaunchTests.swift,
-			);
-			target = 0242C2202E7BAB320065FDEE /* PollSNSUITests */;
-		};
-		02F2CE3A2E7C66D100B080A7 /* Exceptions for "Views" folder in "PollSNS" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
+				NewPollView.swift,
 				PollDetailView.swift,
 				PollTimelineView.swift,
 			);
 			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
 		};
-		02F2CE3C2E7C6B4500B080A7 /* Exceptions for "Models" folder in "PollSNS" target */ = {
+		02F2CE542E7E940E00B080A7 /* Exceptions for "Models" folder in "PollSNS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Poll.swift,
 				PollOption.swift,
+				VoteResult.swift,
 			);
 			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
 		};
-		02F2CE3E2E7C6D0700B080A7 /* Exceptions for "API" folder in "PollSNS" target */ = {
+		02F2CE572E7E942F00B080A7 /* Exceptions for "API" folder in "PollSNS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				PollAPI.swift,
 			);
 			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
 		};
-		02F2CE402E7C6E2700B080A7 /* Exceptions for "Config" folder in "PollSNS" target */ = {
+		02F2CE592E7E94F100B080A7 /* Exceptions for "Config" folder in "PollSNS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AppConfig.swift,
@@ -100,17 +86,13 @@
 		};
 		0242C21A2E7BAB320065FDEE /* PollSNSTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				0242C2522E7BE4B90065FDEE /* Exceptions for "PollSNSTests" folder in "PollSNSTests" target */,
-				0242C2532E7BE4B90065FDEE /* Exceptions for "PollSNSTests" folder in "PollSNSUITests" target */,
-			);
 			path = PollSNSTests;
 			sourceTree = "<group>";
 		};
 		02F2CE302E7C2E3600B080A7 /* Models */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				02F2CE3C2E7C6B4500B080A7 /* Exceptions for "Models" folder in "PollSNS" target */,
+				02F2CE542E7E940E00B080A7 /* Exceptions for "Models" folder in "PollSNS" target */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -118,7 +100,7 @@
 		02F2CE332E7C2EF100B080A7 /* Config */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				02F2CE402E7C6E2700B080A7 /* Exceptions for "Config" folder in "PollSNS" target */,
+				02F2CE592E7E94F100B080A7 /* Exceptions for "Config" folder in "PollSNS" target */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -126,7 +108,7 @@
 		02F2CE352E7C2FB600B080A7 /* API */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				02F2CE3E2E7C6D0700B080A7 /* Exceptions for "API" folder in "PollSNS" target */,
+				02F2CE572E7E942F00B080A7 /* Exceptions for "API" folder in "PollSNS" target */,
 			);
 			path = API;
 			sourceTree = "<group>";
@@ -134,7 +116,7 @@
 		02F2CE372E7C63D800B080A7 /* Views */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				02F2CE3A2E7C66D100B080A7 /* Exceptions for "Views" folder in "PollSNS" target */,
+				02F2CE522E7E934D00B080A7 /* Exceptions for "Views" folder in "PollSNS" target */,
 			);
 			path = Views;
 			sourceTree = "<group>";
