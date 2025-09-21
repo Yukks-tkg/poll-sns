@@ -38,6 +38,36 @@ enum PollAPI {
         return counter.map { VoteResult(option_id: $0.key, count: $0.value) }
     }
 
+    /// 指定ユーザーがその Poll に投票済みかを判定（1件でもあれば true）
+    static func hasVoted(pollID: UUID, userID: UUID) async throws -> Bool {
+        guard let base = URL(string: AppConfig.supabaseURL) else { return false }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/votes"
+        comps.queryItems = [
+            URLQueryItem(name: "poll_id", value: "eq.\(pollID.uuidString.uppercased())"),
+            URLQueryItem(name: "user_id", value: "eq.\(userID.uuidString.uppercased())"),
+            URLQueryItem(name: "select", value: "id"),
+            URLQueryItem(name: "limit", value: "1")
+        ]
+
+        let url = comps.url!
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        if !(200...299).contains(code) {
+            // 失敗時は false を返すより、上層で扱いたいのでエラー化
+            throw URLError(.badServerResponse)
+        }
+        struct Row: Decodable { let id: UUID }
+        let rows = try JSONDecoder().decode([Row].self, from: data)
+        return !rows.isEmpty
+    }
+
     // MARK: - Polls
     static func fetchAllPolls(limit: Int = 20) async throws -> [Poll] {
         guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
@@ -254,7 +284,7 @@ enum PollAPI {
         comps.path = "/rest/v1/polls"
 
         var items: [URLQueryItem] = [
-            URLQueryItem(name: "select", value: "id,question,category,created_at"),
+            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id"),
             URLQueryItem(name: "order", value: order),
             URLQueryItem(name: "limit", value: "\(limit)")
         ]
@@ -289,7 +319,7 @@ enum PollAPI {
         comps.path = "/rest/v1/polls_popular"
 
         var items: [URLQueryItem] = [
-            URLQueryItem(name: "select", value: "id,question,category,created_at,like_count"),
+            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id,like_count"),
             URLQueryItem(name: "order", value: "like_count.desc,created_at.desc"),
             URLQueryItem(name: "limit", value: "\(limit)")
         ]

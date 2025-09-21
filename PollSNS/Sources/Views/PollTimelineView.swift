@@ -43,7 +43,6 @@ struct PollTimelineView: View {
     }
 
     var body: some View {
-        NavigationView {
             VStack(spacing: 0) {
                 sortBar
                 categoryBar
@@ -105,7 +104,6 @@ struct PollTimelineView: View {
             }) {
                 NavigationStack { NewPollView() }
             }
-        }
     }
 
     private var categoryBar: some View {

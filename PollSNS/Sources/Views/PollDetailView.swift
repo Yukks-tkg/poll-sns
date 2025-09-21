@@ -11,6 +11,7 @@ struct PollDetailView: View {
     @State private var voted = false
     @State private var loading = false
     @State private var errorMessage: String?
+    @State private var showAbsoluteTime = false
 
     // Results
     @State private var results: [VoteResult] = []
@@ -22,6 +23,30 @@ struct PollDetailView: View {
 
     // Lock state (disable interactions when voted / submitting / loading)
     private var isLocked: Bool { voted || isSubmitting || loading }
+
+    // 作成者テキスト（Auth導入前は devUserID と一致したら「あなた」）
+    private var ownerText: String {
+        if let owner = poll.owner_id, owner == AppConfig.devUserID {
+            return "作成者: あなた"
+        } else if poll.owner_id != nil {
+            return "作成者: 匿名"
+        } else {
+            return "作成者: －"
+        }
+    }
+
+    // absolute(固定書式) と relative(◯分前) の切り替えに使う
+    private func relativeFromAbsoluteString(_ absolute: String) -> String {
+        // 既存の createdAtFormatted は "yyyy/MM/dd HH:mm" 形式想定
+        let abs = DateFormatter()
+        abs.locale = Locale(identifier: "ja_JP")
+        abs.dateFormat = "yyyy/MM/dd HH:mm"
+        guard let date = abs.date(from: absolute) else { return absolute }
+        let rel = RelativeDateTimeFormatter()
+        rel.locale = Locale(identifier: "ja_JP")
+        rel.unitsStyle = .full
+        return rel.localizedString(for: date, relativeTo: Date())
+    }
 
     // MARK: - Small subviews (to keep body shallow for type-checker)
     private struct OptionRow: View {
@@ -68,6 +93,20 @@ struct PollDetailView: View {
                 .frame(height: 8)
             }
         }
+    }
+
+    @ViewBuilder
+    private var resultsPlaceholder: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("結果")
+                .font(.headline)
+            Text("投票すると結果が見えます")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder
@@ -155,29 +194,58 @@ struct PollDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
 
+                // ヘッダー：作成者 + 作成時刻(トグル) + カテゴリ
+                HStack(alignment: .center, spacing: 12) {
+                    // 簡易アバター
+                    Circle()
+                        .fill(Color.secondary.opacity(0.2))
+                        .frame(width: 34, height: 34)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        )
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ownerText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        if let created = poll.createdAtFormatted {
+                            Text(showAbsoluteTime ? created : relativeFromAbsoluteString(created))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .onTapGesture { showAbsoluteTime.toggle() }
+                                .animation(.default, value: showAbsoluteTime)
+                        }
+                    }
+
+                    Spacer()
+
+                    // カテゴリチップ
+                    Text(poll.category)
+                        .font(.caption2)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Color(.systemGray6))
+                        .clipShape(Capsule())
+                }
+
                 // 問題文
                 Text(poll.question)
                     .font(.title2).bold()
                     .multilineTextAlignment(.leading)
 
-                // カテゴリ + 作成日時
                 HStack(spacing: 12) {
-                    Text(poll.category)
-                        .font(.caption)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color(.systemGray6))
-                        .clipShape(Capsule())
-
-                    if let created = poll.createdAtFormatted {
-                        Label(created, systemImage: "clock")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    // （ヘッダーに移動済みのためカテゴリのみ軽く再掲 or 必要なら削除）
+                    // 表示が重複するならこのHStack自体を削除してもOK
                 }
 
                 optionsSection
-                resultsSection
+                if showResults {
+                    resultsSection
+                } else {
+                    resultsPlaceholder
+                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
@@ -185,7 +253,20 @@ struct PollDetailView: View {
         .navigationTitle("Poll")
         .task {
             await loadOptions()
-            await loadResults()
+            do {
+                // 判定: すでに投票済みなら結果を表示
+                let votedNow = try await PollAPI.hasVoted(pollID: poll.id, userID: dummyUserID)
+                voted = votedNow
+                if votedNow {
+                    await loadResults()
+                    showResults = true
+                } else {
+                    showResults = false
+                }
+            } catch {
+                // 判定に失敗したら結果は隠す（後で投票すれば表示）
+                showResults = false
+            }
         }
     }
 
@@ -207,12 +288,10 @@ struct PollDetailView: View {
             let rows = try await PollAPI.fetchResults(for: poll.id)
             results = rows
             totalVotes = rows.reduce(0) { $0 + $1.count }
-            showResults = true
         } catch {
             // 結果は無くても UI は出す
             results = []
             totalVotes = 0
-            showResults = true
         }
     }
 
@@ -224,6 +303,7 @@ struct PollDetailView: View {
             try await PollAPI.submitVote(pollID: poll.id, optionID: optionID, userID: dummyUserID)
             voted = true
             await loadResults()
+            showResults = true
         } catch {
             errorMessage = error.localizedDescription
         }
