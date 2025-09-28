@@ -32,6 +32,15 @@ struct RootTabView: View {
                 Label("作成", systemImage: "plus.circle")
             }
             .tag(1)
+
+            // タブ3：プロフィール
+            NavigationStack {
+                ProfileView()
+            }
+            .tabItem {
+                Label("プロフィール", systemImage: "person.crop.circle")
+            }
+            .tag(2)
         }
     }
 }
