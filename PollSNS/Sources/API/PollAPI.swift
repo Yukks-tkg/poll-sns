@@ -60,6 +60,68 @@ enum PollAPI {
         "prefer_not_to_say"
     ]
 
+    // MARK: - Filtered results (k-anonymity aware via RPC)
+    struct PollResultFilters: Encodable {
+        var minAge: Int? = nil
+        var maxAge: Int? = nil
+        var ageBucketWidth: Int = 7              // 5/7/10
+        var occupations: [String]? = nil         // ["student", "employee_fulltime", ...]
+        var countryCode: String? = nil           // e.g., "JP"
+        var prefectureCode: String? = nil        // e.g., "13" (Tokyo), nil for unspecified
+
+        func toRPCBody(pollID: UUID) -> [String: Any] {
+            var body: [String: Any] = [
+                "p_poll_id": pollID.uuidString,
+                "p_age_bucket_width": ageBucketWidth
+            ]
+            if let v = minAge { body["p_min_age"] = v }
+            if let v = maxAge { body["p_max_age"] = v }
+            if let v = occupations, !v.isEmpty { body["p_occupations"] = v }
+            if let v = countryCode { body["p_country_code"] = v }
+            if let v = prefectureCode { body["p_prefecture_code"] = v }
+            return body
+        }
+    }
+
+    struct FilteredVoteRow: Decodable, Identifiable {
+        let option_id: UUID
+        let option_label: String
+        let cnt: Int
+        let total: Int
+
+        var id: UUID { option_id }
+        var percentage: Int {
+            guard total > 0 else { return 0 }
+            return Int(round((Double(cnt) / Double(total)) * 100.0))
+        }
+    }
+
+    static func fetchFilteredResults(pollID: UUID, filters: PollResultFilters) async throws -> [FilteredVoteRow] {
+        guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/rpc/poll_results_filtered"
+        let url = comps.url!
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+
+        let body = filters.toRPCBody(pollID: pollID)
+        req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        if !(200...299).contains(code) {
+            let raw = String(data: data, encoding: .utf8) ?? "<binary>"
+            print("FILTERED RESULTS HTTP:", code, "RAW:", raw)
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder.iso8601.decode([FilteredVoteRow].self, from: data)
+    }
+
     // MARK: - Profiles API
     /// 更新用の入力（nil は送らない）
     struct ProfileInput: Encodable {

@@ -265,8 +265,8 @@ struct PollDetailView: View {
             do {
                 let map = try await PollAPI.fetchUserVoteDetailMap(pollIDs: [poll.id], userID: dummyUserID)
                 if let detail = map[poll.id] {
-                    // detail.0: option_id (UUID?), detail.1: label (String?)
-                    voted = (detail.0 != nil)
+                    // API returns entries only when the user has voted for that poll
+                    voted = true
                     myChoiceLabel = detail.1
                 } else {
                     voted = false
