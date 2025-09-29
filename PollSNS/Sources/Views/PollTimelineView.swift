@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct PollTimelineView: View {
     @State private var polls: [Poll] = []
@@ -8,6 +9,8 @@ struct PollTimelineView: View {
     @State private var likeCounts: [UUID: Int] = [:]   // pollID -> いいね数
     @State private var likedSet: Set<UUID> = []        // 自分がいいね済みの pollID
     @State private var likingNow: Set<UUID> = []       // 二重タップ防止
+    @State private var votedSet: Set<UUID> = []          // 自分が投票済みの pollID
+    @State private var myChoiceMap: [UUID: String] = [:] // pollID -> 自分の選択ラベル
     @State private var showingNewPoll = false
     private let dummyUserID = UUID(uuidString: "47F61351-7F40-4899-8710-23173BD9C943")!
 
@@ -51,15 +54,14 @@ struct PollTimelineView: View {
                         PollDetailView(poll: poll)
                     } label: {
                         HStack(alignment: .center, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(poll.question)
-                                    .font(.headline)
-                                Text(poll.category)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 0)
-                            // 右側：いいねボタン
+                            // 共通行表示（投票済みバッジ & あなたの選択ラベル対応）
+                            PollRow(
+                                poll: poll,
+                                isVoted: votedSet.contains(poll.id),
+                                myChoiceLabel: myChoiceMap[poll.id]
+                            )
+
+                            // 右側：いいねボタン（既存）
                             let count = likeCounts[poll.id] ?? 0
                             let isLiked = likedSet.contains(poll.id)
                             Button {
@@ -96,6 +98,9 @@ struct PollTimelineView: View {
                 }
             }
             .task { await load() }
+            .onReceive(NotificationCenter.default.publisher(for: .pollDidVote)) { _ in
+                Task { await reloadTimeline() }
+            }
             .onChange(of: sortOrder) { _ in
                 Task { await load() }
             }
@@ -148,6 +153,16 @@ struct PollTimelineView: View {
             let ids = polls.map(\.id)
             likeCounts = try await PollAPI.fetchLikeCounts(pollIDs: ids)
             likedSet   = try await PollAPI.fetchUserLiked(pollIDs: ids, userID: dummyUserID)
+            // 投票済み情報（バッジと “あなたの選択” 表示用）
+            do {
+                let detail = try await PollAPI.fetchUserVoteDetailMap(pollIDs: ids, userID: dummyUserID)
+                self.votedSet = Set(detail.keys)
+                self.myChoiceMap = detail.reduce(into: [:]) { $0[$1.key] = $1.value.1 }
+            } catch {
+                // 取得失敗時は空のまま（UIは非表示になるだけ）
+                self.votedSet = []
+                self.myChoiceMap = [:]
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

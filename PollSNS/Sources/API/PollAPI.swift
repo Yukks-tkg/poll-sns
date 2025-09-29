@@ -235,6 +235,76 @@ enum PollAPI {
         return try await hasVoted(pollID: pollID, userID: userID)
     }
 
+    // MARK: - Votes (user voted set / map with option label)
+    /// 指定の pollIDs のうち、ユーザーが投票済みの poll_id セットを取得します（バッジ用途）。
+    static func fetchUserVoted(pollIDs: [UUID], userID: UUID) async throws -> Set<UUID> {
+        guard !pollIDs.isEmpty else { return [] }
+        guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/votes"
+        // poll_id in (...) & user_id = ...
+        let idsString = pollIDs.map { $0.uuidString.uppercased() }.joined(separator: ",")
+        comps.queryItems = [
+            URLQueryItem(name: "poll_id", value: "in.(\(idsString))"),
+            URLQueryItem(name: "user_id", value: "eq.\(userID.uuidString.uppercased())"),
+            URLQueryItem(name: "select", value: "poll_id"),
+            URLQueryItem(name: "limit", value: "10000")
+        ]
+
+        var req = URLRequest(url: comps.url!)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+
+        struct Row: Decodable { let poll_id: UUID }
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        let rows = try JSONDecoder.iso8601.decode([Row].self, from: data)
+        return Set(rows.map(\.poll_id))
+    }
+
+    /// ユーザーが選んだ option のラベルまで含めて取得（一覧で「あなたの選択：◯◯」と出す用途）
+    /// 返り値: pollID -> (optionID, optionLabel?)
+    static func fetchUserVoteDetailMap(pollIDs: [UUID], userID: UUID) async throws -> [UUID: (UUID, String?)] {
+        guard !pollIDs.isEmpty else { return [:] }
+        guard let base = URL(string: AppConfig.supabaseURL) else { return [:] }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/votes"
+        let idsString = pollIDs.map { $0.uuidString.uppercased() }.joined(separator: ",")
+        // 外部キーで poll_options を紐づけて label を取得（PostgREST のリレーション記法）
+        comps.queryItems = [
+            URLQueryItem(name: "poll_id", value: "in.(\(idsString))"),
+            URLQueryItem(name: "user_id", value: "eq.\(userID.uuidString.uppercased())"),
+            URLQueryItem(name: "select", value: "poll_id,option_id,option:poll_options(label,id)"),
+            URLQueryItem(name: "limit", value: "10000")
+        ]
+
+        var req = URLRequest(url: comps.url!)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+
+        struct Row: Decodable {
+            let poll_id: UUID
+            let option_id: UUID
+            struct Opt: Decodable { let label: String?; let id: UUID? }
+            let option: Opt?
+        }
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        let rows = try JSONDecoder.iso8601.decode([Row].self, from: data)
+        var map: [UUID: (UUID, String?)] = [:]
+        for r in rows { map[r.poll_id] = (r.option_id, r.option?.label) }
+        return map
+    }
+
     // MARK: - Polls
     static func fetchAllPolls(limit: Int = 20) async throws -> [Poll] {
         guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
@@ -653,6 +723,71 @@ enum PollAPI {
         return Set(rows.map(\.poll_id))
     }
     // MARK: - My content helpers
+    // --- Voted polls helpers (IDs -> Polls) ---
+    /// そのユーザーが投票した poll_id 一覧を取得（重複除外）
+    static func fetchVotedPollIDs(userID: UUID, limit: Int = 200) async throws -> [UUID] {
+        guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/votes"
+        comps.queryItems = [
+            URLQueryItem(name: "user_id", value: "eq.\(userID.uuidString.uppercased())"),
+            URLQueryItem(name: "select", value: "poll_id"),
+            URLQueryItem(name: "limit", value: "\(limit)")
+        ]
+
+        var req = URLRequest(url: comps.url!)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        struct Row: Decodable { let poll_id: UUID }
+        let rows = try JSONDecoder().decode([Row].self, from: data)
+        var set = Set<UUID>()
+        var uniq: [UUID] = []
+        for r in rows {
+            if !set.contains(r.poll_id) { set.insert(r.poll_id); uniq.append(r.poll_id) }
+        }
+        return uniq
+    }
+
+    /// poll_id 群で Poll をまとめて取得（最新順）
+    static func fetchPollsByIDs(_ ids: [UUID]) async throws -> [Poll] {
+        if ids.isEmpty { return [] }
+        let idList = ids.map { $0.uuidString.uppercased() }.joined(separator: ",")
+        guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/polls"
+        comps.queryItems = [
+            URLQueryItem(name: "id", value: "in.(\(idList))"),
+            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id"),
+            URLQueryItem(name: "order", value: "created_at.desc"),
+            URLQueryItem(name: "limit", value: "\(ids.count)")
+        ]
+
+        var req = URLRequest(url: comps.url!)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode([Poll].self, from: data)
+    }
+
+    /// ユーザーの「投票したPoll一覧」を一発で取得（ラッパー）
+    static func fetchPollsVotedBy(userID: UUID) async throws -> [Poll] {
+        let ids = try await fetchVotedPollIDs(userID: userID)
+        return try await fetchPollsByIDs(ids)
+    }
     /// 自分が作成した Poll 一覧を取得（最新順）
     static func fetchMyPosts(ownerID: UUID,
                              limit: Int = 50,

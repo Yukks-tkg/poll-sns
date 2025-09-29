@@ -39,16 +39,9 @@ struct ProfileView: View {
                 MyPostsListView(ownerID: AppConfig.devUserID)
                     .listStyle(.plain)
             } else {
-                // 自分の投票（暫定表示）
-                List {
-                    Section {
-                        Text("自分の投票は準備中…")
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.vertical, 24)
-                    }
-                }
-                .listStyle(.plain)
+                // 自分の投票一覧（List が自身でスクロールを管理）
+                MyVotesListView(userID: AppConfig.devUserID)
+                    .listStyle(.plain)
             }
         }
         // --- NavigationBar ---

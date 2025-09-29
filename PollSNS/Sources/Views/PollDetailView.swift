@@ -11,6 +11,7 @@ struct PollDetailView: View {
     @State private var voted = false
     @State private var loading = false
     @State private var errorMessage: String?
+    @State private var myChoiceLabel: String? = nil
     @State private var showAbsoluteTime = false
 
     // Results
@@ -135,12 +136,20 @@ struct PollDetailView: View {
         } else {
             VStack(spacing: 16) {
                 ForEach(options) { opt in
-                    OptionRow(
-                        text: opt.displayText,
-                        isSelected: selectedOptionID == opt.id,
-                        locked: isLocked,
-                        onTap: { selectedOptionID = opt.id }
-                    )
+                    HStack(spacing: 8) {
+                        OptionRow(
+                            text: opt.displayText,
+                            isSelected: selectedOptionID == opt.id,
+                            locked: isLocked,
+                            onTap: { selectedOptionID = opt.id }
+                        )
+                        // 既に投票済みで、かつこの行が自分の選択ならバッジ表示
+                        if voted, let label = myChoiceLabel, label == opt.displayText {
+                            Label("あなたの選択", systemImage: "checkmark")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 Button {
@@ -254,18 +263,33 @@ struct PollDetailView: View {
         .task {
             await loadOptions()
             do {
-                // 判定: すでに投票済みなら結果を表示
-                let votedNow = try await PollAPI.hasVoted(pollID: poll.id, userID: dummyUserID)
-                voted = votedNow
-                if votedNow {
+                let map = try await PollAPI.fetchUserVoteDetailMap(pollIDs: [poll.id], userID: dummyUserID)
+                if let detail = map[poll.id] {
+                    // detail.0: option_id (UUID?), detail.1: label (String?)
+                    voted = (detail.0 != nil)
+                    myChoiceLabel = detail.1
+                } else {
+                    voted = false
+                    myChoiceLabel = nil
+                }
+                if voted {
                     await loadResults()
                     showResults = true
                 } else {
                     showResults = false
                 }
             } catch {
-                // 判定に失敗したら結果は隠す（後で投票すれば表示）
                 showResults = false
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .pollDidVote)) { note in
+            if let id = note.userInfo?[AppNotificationKey.pollID] as? UUID, id == poll.id {
+                voted = true
+                if let label = note.userInfo?[AppNotificationKey.optionID] as? UUID,
+                   let chosen = options.first(where: { $0.id == label }) {
+                    myChoiceLabel = chosen.displayText
+                }
+                Task { await loadResults(); showResults = true }
             }
         }
     }
@@ -302,8 +326,20 @@ struct PollDetailView: View {
         do {
             try await PollAPI.submitVote(pollID: poll.id, optionID: optionID, userID: dummyUserID)
             voted = true
+            if let chosen = options.first(where: { $0.id == optionID }) {
+                myChoiceLabel = chosen.displayText
+            }
             await loadResults()
             showResults = true
+            NotificationCenter.default.post(
+                name: .pollDidVote,
+                object: nil,
+                userInfo: [
+                    AppNotificationKey.pollID: poll.id,
+                    AppNotificationKey.optionID: optionID,
+                    AppNotificationKey.userID: dummyUserID
+                ]
+            )
         } catch {
             errorMessage = error.localizedDescription
         }

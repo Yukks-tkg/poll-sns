@@ -53,10 +53,12 @@
 				PollDetailView.swift,
 				PollTimelineView.swift,
 				Profile/MyPostsListView.swift,
+				Profile/MyVotesListView.swift,
 				Profile/ProfileEditView.swift,
 				Profile/ProfileView.swift,
 				Profile/SettingsSheet.swift,
 				RootTabView.swift,
+				Shared/PollRow.swift,
 			);
 			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
 		};
@@ -80,6 +82,13 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AppConfig.swift,
+			);
+			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
+		};
+		02F2CE702E8A2C3D00B080A7 /* Exceptions for "Utils" folder in "PollSNS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AppNotifications.swift,
 			);
 			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
 		};
@@ -126,6 +135,14 @@
 				02F2CE522E7E934D00B080A7 /* Exceptions for "Views" folder in "PollSNS" target */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		02F2CE6D2E8A2BAC00B080A7 /* Utils */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				02F2CE702E8A2C3D00B080A7 /* Exceptions for "Utils" folder in "PollSNS" target */,
+			);
+			path = Utils;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -200,6 +217,7 @@
 		0242C2392E7BB8D00065FDEE /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				02F2CE6D2E8A2BAC00B080A7 /* Utils */,
 				02F2CE372E7C63D800B080A7 /* Views */,
 				02F2CE352E7C2FB600B080A7 /* API */,
 				02F2CE332E7C2EF100B080A7 /* Config */,
