@@ -68,6 +68,7 @@ enum PollAPI {
         var occupations: [String]? = nil         // ["student", "employee_fulltime", ...]
         var countryCode: String? = nil           // e.g., "JP"
         var prefectureCode: String? = nil        // e.g., "13" (Tokyo), nil for unspecified
+        var gender: String? = nil              // "male" | "female" | "other" | nil(=all)
 
         func toRPCBody(pollID: UUID) -> [String: Any] {
             var body: [String: Any] = [
@@ -79,6 +80,7 @@ enum PollAPI {
             if let v = occupations, !v.isEmpty { body["p_occupations"] = v }
             if let v = countryCode { body["p_country_code"] = v }
             if let v = prefectureCode { body["p_prefecture_code"] = v }
+            if let v = gender { body["p_gender"] = v }
             return body
         }
     }
@@ -259,6 +261,27 @@ enum PollAPI {
         var counter: [UUID: Int] = [:]
         for r in rows { counter[r.option_id, default: 0] += 1 }
         return counter.map { VoteResult(option_id: $0.key, count: $0.value) }
+    }
+
+    // MARK: - Filtered results (client-side fallback for filter UI)
+    /// フィルタUI用の簡易フィルタ。現状はクライアント側集計のため
+    /// サーバーへのクエリ条件には使っていません（将来 RPC 版へ切替予定）。
+    struct ResultFilter: Encodable {
+        var minAge: Int? = nil
+        var maxAge: Int? = nil
+        var occupation: String? = nil      // 例: "student", "employee_fulltime" など
+        var countryCode: String? = nil     // 例: "JP"
+        var prefectureCode: String? = nil  // 例: "13"（東京都）
+    }
+
+    /// フィルタ指定つきの結果取得（UI のための薄いラッパー）。
+    /// いまは既存の `fetchResults(for:)` を呼んで合計票数を同時に返すだけ。
+    /// 将来、サーバー側集計（RPC）に切り替える際は、ここで `filters` を使って
+    /// `fetchFilteredResults(pollID:filters:)` を呼ぶように差し替えます。
+    static func fetchResults(pollID: UUID, filter: ResultFilter?) async throws -> (rows: [VoteResult], total: Int) {
+        let rows = try await fetchResults(for: pollID)
+        let total = rows.reduce(0) { $0 + $1.count }
+        return (rows, total)
     }
 
     /// 指定ユーザーがその Poll に投票済みかを判定（1件でもあれば true）

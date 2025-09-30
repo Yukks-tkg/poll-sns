@@ -14,6 +14,31 @@ struct PollDetailView: View {
     @State private var myChoiceLabel: String? = nil
     @State private var showAbsoluteTime = false
 
+    // MARK: - Gender filter (UI only for now)
+    private enum GenderFilter: String, CaseIterable, Identifiable {
+        case all, male, female, other
+        var id: Self { self }
+        var label: String {
+            switch self {
+            case .all:    return "すべて"
+            case .male:   return "男性"
+            case .female: return "女性"
+            case .other:  return "その他"
+            }
+        }
+        /// API 渡し用（現状は未使用）
+        var apiValue: String? {
+            switch self {
+            case .all:    return nil
+            case .male:   return "male"
+            case .female: return "female"
+            case .other:  return "other"
+            }
+        }
+    }
+
+    @State private var genderFilter: GenderFilter = .all
+
     // Results
     @State private var results: [VoteResult] = []
     @State private var totalVotes: Int = 0
@@ -108,6 +133,23 @@ struct PollDetailView: View {
         .padding()
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    // 性別フィルタ（UIのみ。切替で結果再読み込み）
+    @ViewBuilder
+    private var genderFilterBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("フィルタ")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Picker("性別", selection: $genderFilter) {
+                ForEach(GenderFilter.allCases) { g in
+                    Text(g.label).tag(g)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+        .padding(.top, 4)
     }
 
     @ViewBuilder
@@ -244,6 +286,8 @@ struct PollDetailView: View {
                     .font(.title2).bold()
                     .multilineTextAlignment(.leading)
 
+                genderFilterBar
+
                 HStack(spacing: 12) {
                     // （ヘッダーに移動済みのためカテゴリのみ軽く再掲 or 必要なら削除）
                     // 表示が重複するならこのHStack自体を削除してもOK
@@ -262,41 +306,51 @@ struct PollDetailView: View {
         .navigationTitle("Poll")
         .task {
             await loadOptions()
+
             do {
                 let map = try await PollAPI.fetchUserVoteDetailMap(pollIDs: [poll.id], userID: dummyUserID)
                 if let detail = map[poll.id] {
-                    // API returns entries only when the user has voted for that poll
-                    voted = true
-                    myChoiceLabel = detail.1
+                    await MainActor.run {
+                        self.voted = true
+                        self.myChoiceLabel = detail.1
+                    }
                 } else {
-                    voted = false
-                    myChoiceLabel = nil
+                    await MainActor.run {
+                        self.voted = false
+                        self.myChoiceLabel = nil
+                    }
                 }
-                if voted {
+                if await MainActor.run(body: { self.voted }) {
                     await loadResults()
-                    showResults = true
+                    await MainActor.run { self.showResults = true }
                 } else {
-                    showResults = false
+                    await MainActor.run { self.showResults = false }
                 }
             } catch {
-                showResults = false
+                await MainActor.run { self.showResults = false }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .pollDidVote)) { note in
-            if let id = note.userInfo?[AppNotificationKey.pollID] as? UUID, id == poll.id {
-                voted = true
-                if let label = note.userInfo?[AppNotificationKey.optionID] as? UUID,
-                   let chosen = options.first(where: { $0.id == label }) {
-                    myChoiceLabel = chosen.displayText
+            Task {
+                if let id = note.userInfo?[AppNotificationKey.pollID] as? UUID, id == poll.id {
+                    await MainActor.run { self.voted = true }
+                    if let optID = note.userInfo?[AppNotificationKey.optionID] as? UUID,
+                       let chosen = options.first(where: { $0.id == optID }) {
+                        await MainActor.run { self.myChoiceLabel = chosen.displayText }
+                    }
+                    await loadResults()
+                    await MainActor.run { self.showResults = true }
                 }
-                Task { await loadResults(); showResults = true }
             }
+        }
+        .onChange(of: genderFilter) { _ in
+            Task { await loadResults() }
         }
     }
 
     // MARK: - Actions
 
-    private func loadOptions() async {
+    @MainActor private func loadOptions() async {
         loading = true
         defer { loading = false }
         do {
@@ -307,7 +361,7 @@ struct PollDetailView: View {
         }
     }
 
-    private func loadResults() async {
+    @MainActor private func loadResults() async {
         do {
             let rows = try await PollAPI.fetchResults(for: poll.id)
             results = rows
@@ -319,7 +373,7 @@ struct PollDetailView: View {
         }
     }
 
-    private func submitVote() async {
+    @MainActor private func submitVote() async {
         guard let optionID = selectedOptionID else { return }
         isSubmitting = true
         defer { isSubmitting = false }
