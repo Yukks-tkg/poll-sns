@@ -25,7 +25,12 @@ private struct WebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        if let url = Bundle.main.url(forResource: htmlFileName, withExtension: "html", subdirectory: "Legal") {
+        // 1) Legal サブディレクトリを探す（青フォルダの場合）
+        let urlInLegal = Bundle.main.url(forResource: htmlFileName, withExtension: "html", subdirectory: "Legal")
+        // 2) ルート直下も探す（黄色フォルダの場合）
+        let urlInRoot = Bundle.main.url(forResource: htmlFileName, withExtension: "html")
+
+        if let url = urlInLegal ?? urlInRoot {
             webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
             webView.scrollView.setContentOffset(.zero, animated: false)
         } else {
