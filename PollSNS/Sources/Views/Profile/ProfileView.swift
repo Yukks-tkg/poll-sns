@@ -33,16 +33,22 @@ struct ProfileView: View {
             .padding(.horizontal)
             .padding(.bottom, 8)
 
-            // コンテンツ（各自がスクロールコンテナ）
-            if selectedSegment == 0 {
-                // 自分の投稿一覧（List が自身でスクロールを管理）
+            // コンテンツ（List を入れ替えず同一コンテナで可視切替）
+            ZStack {
                 MyPostsListView(ownerID: AppConfig.devUserID)
                     .listStyle(.plain)
-            } else {
-                // 自分の投票一覧（List が自身でスクロールを管理）
+                    .opacity(selectedSegment == 0 ? 1 : 0)
+                    .allowsHitTesting(selectedSegment == 0)
+                    .zIndex(selectedSegment == 0 ? 1 : 0)
+
                 MyVotesListView(userID: AppConfig.devUserID)
                     .listStyle(.plain)
+                    .opacity(selectedSegment == 1 ? 1 : 0)
+                    .allowsHitTesting(selectedSegment == 1)
+                    .zIndex(selectedSegment == 1 ? 1 : 0)
             }
+            .animation(nil, value: selectedSegment)
+            .id("ProfileListContainer")
         }
         // --- NavigationBar ---
         .navigationTitle("プロフィール")
