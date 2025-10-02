@@ -13,8 +13,23 @@ struct MyPostsListView: View {
     @State private var polls: [Poll] = []
     @State private var error: String?
     @State private var loading = false
-    @State private var votedSet: Set<UUID> = []          // 自分が投票済みの pollID
-    @State private var myChoiceMap: [UUID: String] = [:] // pollID -> 自分の選択ラベル
+    
+    private func displayCategory(_ key: String) -> String {
+        let map: [String: String] = [
+            "all": "すべて",
+            "food": "🍔 ごはん",
+            "fashion": "👗 ファッション",
+            "health": "🏃 健康",
+            "hobby": "🎮 趣味",
+            "travel": "✈️ 旅行",
+            "relationship": "💬 人間関係",
+            "school_work": "🏫 仕事/学校",
+            "daily": "🧺 日常",
+            "pets": "🐾 ペット",
+            "other": "🌀 その他"
+        ]
+        return map[key] ?? key
+    }
 
     var body: some View {
         Group {
@@ -43,11 +58,26 @@ struct MyPostsListView: View {
                     NavigationLink {
                         PollDetailView(poll: p)
                     } label: {
-                        PollRow(
-                            poll: p,
-                            isVoted: votedSet.contains(p.id),
-                            myChoiceLabel: myChoiceMap[p.id]
-                        )
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(p.question)
+                                .font(.body)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                                .lineLimit(2)
+                            HStack(spacing: 8) {
+                                Text(displayCategory(p.category))
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Color(.systemGray6))
+                                    .clipShape(Capsule())
+                                if let t = p.createdAtFormatted {
+                                    Text(t)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 6)
                     }
                 }
                 .listStyle(.plain)
@@ -55,48 +85,39 @@ struct MyPostsListView: View {
             }
         }
         .task(id: ownerID) { await load() }
-        .onReceive(NotificationCenter.default.publisher(for: .pollDidVote)) { note in
-            if let pid = note.userInfo?[AppNotificationKey.pollID] as? UUID {
-                votedSet.insert(pid)
-                // ラベルは次回ロードで補完（必要ならここで再取得も可）
+        .onReceive(NotificationCenter.default.publisher(for: .pollDidDelete).receive(on: RunLoop.main)) { note in
+            let extractedID: UUID? = {
+                if let any = note.userInfo?["pollID"] {
+                    if let u = any as? UUID { return u }
+                    if let s = any as? String { return UUID(uuidString: s) }
+                }
+                return nil
+            }()
+            guard let id = extractedID else { return }
+            withAnimation {
+                polls.removeAll { $0.id == id }
             }
         }
     }
 
     private func load() async {
+        // 二重起動を避ける（.task と .refreshable が同時に動くケース対策）
+        if loading { return }
         loading = true
         defer { loading = false }
         do {
+            // 自分の投稿を取得（ソフト削除済みはAPI側で除外済み）
             polls = try await PollAPI.fetchMyPolls(ownerID: ownerID)
-            await loadVoteDecorations()
             error = nil
-        } catch {
-            self.error = error.localizedDescription
-        }
-    }
-    
-    private func loadVoteDecorations() async {
-        let ids = polls.map(\.id)
-        guard !ids.isEmpty else {
-            await MainActor.run {
-                votedSet = []
-                myChoiceMap = [:]
-            }
+        } catch is CancellationError {
+            // Pull to Refresh などでキャンセルされた場合は“正常”として無視
             return
-        }
-        do {
-            let detail = try await PollAPI.fetchUserVoteDetailMap(pollIDs: ids, userID: AppConfig.devUserID)
-            await MainActor.run {
-                // API は「投票がある poll だけ」を返す想定なので、keys をそのまま投票済み集合にする
-                votedSet = Set(detail.keys)
-                myChoiceMap = detail.reduce(into: [:]) { dict, elem in
-                    if let label = elem.value.1 {
-                        dict[elem.key] = label
-                    }
-                }
-            }
+        } catch let urlErr as URLError where urlErr.code == .cancelled {
+            return
         } catch {
-            // 失敗時は無視（表示なしでOK）
+            await MainActor.run {
+                self.error = "読み込みに失敗しました"
+            }
         }
     }
 }

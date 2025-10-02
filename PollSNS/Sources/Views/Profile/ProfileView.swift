@@ -100,6 +100,7 @@ struct ProfileView: View {
                 VStack {
                     Text((profile?.avatar_value).map { String($0) } ?? "🙂")
                         .font(.system(size: 64))
+                        .padding(.top, 12)
                         .padding(.bottom, 8)
                     Text(profile?.username ?? "未設定")
                         .font(.title2)
@@ -108,10 +109,12 @@ struct ProfileView: View {
                         Text(profileDetailString())
                             .font(.subheadline)
                             .foregroundColor(.gray)
+                            .padding(.bottom, 12)
                     } else {
                         Text("プロフィールが未設定です")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .padding(.bottom, 12)
                         Button {
                             isSettingsPresented = true
                         } label: {
@@ -132,16 +135,30 @@ struct ProfileView: View {
     private func profileDetailString() -> String {
         guard let profile = profile else { return "" }
         var details: [String] = []
+
+        // 年齢
         if let age = profile.age {
             details.append("\(age)歳")
         }
-        if let prefCode = profile.prefecture_code, !prefCode.isEmpty {
-            details.append(prefectureName(for: prefCode))
+
+        // 性別
+        if let g = profile.gender, !g.isEmpty {
+            details.append(genderLabel(for: g))
         }
-        if let occ = profile.occupation, !occ.isEmpty {
-            details.append(occupationLabel(for: occ))
-        }
+
         return details.joined(separator: "・")
+    }
+
+    private func genderLabel(for code: String) -> String {
+        switch code {
+        case "male": return "男性"
+        case "female": return "女性"
+        case "other": return "その他"
+        case "prefer_not_to_say": return "回答しない"
+        default:
+            // 既に日本語が入っている / 将来拡張のためフォールバック
+            return code
+        }
     }
 
     private func prefectureName(for raw: String) -> String {

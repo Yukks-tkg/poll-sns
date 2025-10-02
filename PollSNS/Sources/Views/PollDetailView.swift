@@ -1,4 +1,9 @@
+
 import SwiftUI
+
+extension Notification.Name {
+    static let pollDidDelete = Notification.Name("pollDidDelete")
+}
 
 struct PollDetailView: View {
     // Input
@@ -39,10 +44,57 @@ struct PollDetailView: View {
 
     @State private var genderFilter: GenderFilter = .all
 
+    // MARK: - Age band filter
+    private enum AgeBand: CaseIterable, Identifiable {
+        case teens, twenties, thirties, forties, fiftiesPlus
+        var id: Self { self }
+        var label: String {
+            switch self {
+            case .teens: return "10代"
+            case .twenties: return "20代"
+            case .thirties: return "30代"
+            case .forties: return "40代"
+            case .fiftiesPlus: return "50代以上"
+            }
+        }
+        var range: (Int?, Int?) {
+            switch self {
+            case .teens:        return (10, 19)
+            case .twenties:     return (20, 29)
+            case .thirties:     return (30, 39)
+            case .forties:      return (40, 49)
+            case .fiftiesPlus:  return (50, nil)
+            }
+        }
+    }
+    @State private var selectedAgeBand: AgeBand? = nil
+    // 性別で色分け表示
+    @State private var colorizeByGender = false
+    @State private var genderBreakdown: [UUID: PollAPI.GenderBreakdown] = [:]
+
+    // 年代で色分け表示
+    @State private var colorizeByAge = false
+    @State private var ageBreakdown: [UUID: PollAPI.AgeBreakdown] = [:]
+
     // Results
     @State private var results: [VoteResult] = []
     @State private var totalVotes: Int = 0
     @State private var showResults = false
+
+    // Report sheet
+    @State private var showReport = false
+
+    // Thank-you alert after reporting
+    @State private var showReportThanks = false
+
+    // Owner avatar emoji (loaded from profiles)
+    @State private var ownerEmoji: String?
+
+    // Delete state
+    @Environment(\.dismiss) private var dismiss
+    @State private var showDeleteConfirm = false
+    @State private var deleting = false
+    @State private var deleteError: String?
 
     // Temporary user id (later replace with Supabase Auth user id)
     private let dummyUserID = UUID(uuidString: "47f61351-7f40-4899-8710-23173bd9c943")!
@@ -72,6 +124,24 @@ struct PollDetailView: View {
         rel.locale = Locale(identifier: "ja_JP")
         rel.unitsStyle = .full
         return rel.localizedString(for: date, relativeTo: Date())
+    }
+
+    // カテゴリ表示（コード -> 絵文字付き日本語ラベル）
+    private func displayCategory(_ key: String) -> String {
+        let map: [String: String] = [
+            "all": "すべて",
+            "food": "🍔 ごはん",
+            "fashion": "👗 ファッション",
+            "health": "🏃 健康",
+            "hobby": "🎮 趣味",
+            "travel": "✈️ 旅行",
+            "relationship": "💬 人間関係",
+            "school_work": "🏫 仕事/学校",
+            "daily": "🧺 日常",
+            "pets": "🐾 ペット",
+            "other": "🌀 その他"
+        ]
+        return map[key] ?? key
     }
 
     // MARK: - Small subviews (to keep body shallow for type-checker)
@@ -121,6 +191,126 @@ struct PollDetailView: View {
         }
     }
 
+    private struct ResultBarStacked: View {
+        let label: String
+        let male: Int
+        let female: Int
+        let other: Int
+        var total: Int { male + female + other }
+
+        private let maleColor = Color.blue
+        private let femaleColor = Color.pink
+        private let otherColor = Color.purple
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(label)
+                    Spacer()
+                    Text("\(total)票").foregroundStyle(.secondary)
+                }
+                GeometryReader { geo in
+                    let w = geo.size.width
+                    let mW = total > 0 ? w * CGFloat(male) / CGFloat(total) : 0
+                    let fW = total > 0 ? w * CGFloat(female) / CGFloat(total) : 0
+                    let oW = total > 0 ? w * CGFloat(other) / CGFloat(total) : 0
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color(.systemGray5))
+                        HStack(spacing: 0) {
+                            Capsule().fill(maleColor).frame(width: mW)
+                            Capsule().fill(femaleColor).frame(width: fW)
+                            Capsule().fill(otherColor).frame(width: oW)
+                        }
+                    }
+                }
+                .frame(height: 8)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        Label("男性 \(male)", systemImage: "square.fill")
+                            .foregroundStyle(maleColor).font(.caption2)
+                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                        Label("女性 \(female)", systemImage: "square.fill")
+                            .foregroundStyle(femaleColor).font(.caption2)
+                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                        Label("その他 \(other)", systemImage: "square.fill")
+                            .foregroundStyle(otherColor).font(.caption2)
+                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+                .padding(.top, 2)
+            }
+        }
+    }
+
+    private struct ResultBarStackedAge: View {
+        let label: String
+        let teens: Int
+        let twenties: Int
+        let thirties: Int
+        let forties: Int
+        let fiftiesPlus: Int
+        var total: Int { teens + twenties + thirties + forties + fiftiesPlus }
+
+        // 色（好みで調整）
+        private let c10 = Color.blue
+        private let c20 = Color.teal
+        private let c30 = Color.green
+        private let c40 = Color.orange
+        private let c50 = Color.pink
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(label)
+                    Spacer()
+                    Text("\(total)票").foregroundStyle(.secondary)
+                }
+                GeometryReader { geo in
+                    let w = geo.size.width
+                    let w10 = total > 0 ? w * CGFloat(teens)       / CGFloat(total) : 0
+                    let w20 = total > 0 ? w * CGFloat(twenties)    / CGFloat(total) : 0
+                    let w30 = total > 0 ? w * CGFloat(thirties)    / CGFloat(total) : 0
+                    let w40 = total > 0 ? w * CGFloat(forties)     / CGFloat(total) : 0
+                    let w50 = total > 0 ? w * CGFloat(fiftiesPlus) / CGFloat(total) : 0
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color(.systemGray5))
+                        HStack(spacing: 0) {
+                            Capsule().fill(c10).frame(width: w10)
+                            Capsule().fill(c20).frame(width: w20)
+                            Capsule().fill(c30).frame(width: w30)
+                            Capsule().fill(c40).frame(width: w40)
+                            Capsule().fill(c50).frame(width: w50)
+                        }
+                    }
+                }
+                .frame(height: 8)
+
+                // 凡例（横スクロールで折り返し防止）
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        Label("10代 \(teens)", systemImage: "square.fill")
+                            .foregroundStyle(c10).font(.caption2)
+                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                        Label("20代 \(twenties)", systemImage: "square.fill")
+                            .foregroundStyle(c20).font(.caption2)
+                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                        Label("30代 \(thirties)", systemImage: "square.fill")
+                            .foregroundStyle(c30).font(.caption2)
+                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                        Label("40代 \(forties)", systemImage: "square.fill")
+                            .foregroundStyle(c40).font(.caption2)
+                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                        Label("50代以上 \(fiftiesPlus)", systemImage: "square.fill")
+                            .foregroundStyle(c50).font(.caption2)
+                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+                .padding(.top, 2)
+            }
+        }
+    }
+
     @ViewBuilder
     private var resultsPlaceholder: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -148,6 +338,51 @@ struct PollDetailView: View {
                 }
             }
             .pickerStyle(.segmented)
+        }
+        .padding(.top, 4)
+    }
+
+    // 年代フィルタ（チップ方式で横スクロール。小画面でも省略されない）
+    @ViewBuilder
+    private var ageFilterBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("年代")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    // 「すべて」チップ
+                    let isAll = (selectedAgeBand == nil)
+                    Text("すべて")
+                        .font(.subheadline)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(isAll ? Color.accentColor.opacity(0.15) : Color(.systemGray6))
+                        .foregroundColor(isAll ? .accentColor : .primary)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(isAll ? Color.accentColor : Color(.systemGray4), lineWidth: 1))
+                        .onTapGesture {
+                            if selectedAgeBand != nil {
+                                selectedAgeBand = nil
+                            }
+                        }
+
+                    ForEach(AgeBand.allCases) { b in
+                        let isSel = (selectedAgeBand == b)
+                        Text(b.label)
+                            .font(.subheadline)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(isSel ? Color.accentColor.opacity(0.15) : Color(.systemGray6))
+                            .foregroundColor(isSel ? .accentColor : .primary)
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(isSel ? Color.accentColor : Color(.systemGray4), lineWidth: 1))
+                            .onTapGesture { selectedAgeBand = b }
+                    }
+                }
+                .padding(.horizontal, 2)
+                .padding(.vertical, 2)
+            }
         }
         .padding(.top, 4)
     }
@@ -221,9 +456,51 @@ struct PollDetailView: View {
     private var resultsSection: some View {
         // 結果表示
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(alignment: .center, spacing: 8) {
                 Text("結果").font(.headline)
                 Spacer()
+                Button {
+                    colorizeByGender.toggle()
+                    if colorizeByGender {
+                        colorizeByAge = false // 同時ONを避ける
+                        Task { await loadGenderBreakdown() }
+                    }
+                } label: {
+                    Text("性別")
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(colorizeByGender ? Color.accentColor.opacity(0.15) : Color.clear)
+                        .foregroundColor(colorizeByGender ? .accentColor : .secondary)
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule().stroke(colorizeByGender ? Color.accentColor : Color(.systemGray4), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("性別で色分け")
+                .accessibilityValue(colorizeByGender ? "オン" : "オフ")
+                Button {
+                    colorizeByAge.toggle()
+                    if colorizeByAge {
+                        colorizeByGender = false // 同時ONを避ける
+                        Task { await loadAgeBreakdown() }
+                    }
+                } label: {
+                    Text("年代")
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(colorizeByAge ? Color.accentColor.opacity(0.15) : Color.clear)
+                        .foregroundColor(colorizeByAge ? .accentColor : .secondary)
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule().stroke(colorizeByAge ? Color.accentColor : Color(.systemGray4), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("年代で色分け")
+                .accessibilityValue(colorizeByAge ? "オン" : "オフ")
                 if totalVotes > 0 {
                     Text("\(totalVotes)票").font(.caption).foregroundStyle(.secondary)
                 } else {
@@ -231,8 +508,21 @@ struct PollDetailView: View {
                 }
             }
             ForEach(options) { opt in
-                let count = countFor(optionID: opt.id)
-                ResultBar(label: opt.displayText, count: count, total: totalVotes)
+                if colorizeByAge, let ab = ageBreakdown[opt.id] {
+                    ResultBarStackedAge(
+                        label: opt.displayText,
+                        teens: ab.teens,
+                        twenties: ab.twenties,
+                        thirties: ab.thirties,
+                        forties: ab.forties,
+                        fiftiesPlus: ab.fiftiesPlus
+                    )
+                } else if colorizeByGender, let gb = genderBreakdown[opt.id] {
+                    ResultBarStacked(label: opt.displayText, male: gb.male, female: gb.female, other: gb.other)
+                } else {
+                    let count = countFor(optionID: opt.id)
+                    ResultBar(label: opt.displayText, count: count, total: totalVotes)
+                }
             }
         }
         .padding()
@@ -247,15 +537,20 @@ struct PollDetailView: View {
 
                 // ヘッダー：作成者 + 作成時刻(トグル) + カテゴリ
                 HStack(alignment: .center, spacing: 12) {
-                    // 簡易アバター
-                    Circle()
-                        .fill(Color.secondary.opacity(0.2))
-                        .frame(width: 34, height: 34)
-                        .overlay(
+                    // 簡易アバター（絵文字優先、なければプレースホルダー）
+                    ZStack {
+                        Circle()
+                            .fill(Color.secondary.opacity(0.2))
+                            .frame(width: 34, height: 34)
+                        if let e = ownerEmoji, !e.isEmpty {
+                            Text(e)
+                                .font(.system(size: 20))
+                        } else {
                             Image(systemName: "person.fill")
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(.secondary)
-                        )
+                        }
+                    }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ownerText)
@@ -274,7 +569,7 @@ struct PollDetailView: View {
                     Spacer()
 
                     // カテゴリチップ
-                    Text(poll.category)
+                    Text(displayCategory(poll.category))
                         .font(.caption2)
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(Color(.systemGray6))
@@ -286,7 +581,6 @@ struct PollDetailView: View {
                     .font(.title2).bold()
                     .multilineTextAlignment(.leading)
 
-                genderFilterBar
 
                 HStack(spacing: 12) {
                     // （ヘッダーに移動済みのためカテゴリのみ軽く再掲 or 必要なら削除）
@@ -303,9 +597,82 @@ struct PollDetailView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
-        .navigationTitle("Poll")
+        
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button(role: .destructive) {
+                        showReport = true
+                    } label: {
+                        Label("通報する", systemImage: "exclamationmark.bubble")
+                    }
+                    if let owner = poll.owner_id, owner == AppConfig.devUserID {
+                        Button(role: .destructive) {
+                            showDeleteConfirm = true
+                        } label: {
+                            Label("投稿を削除", systemImage: "trash")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
+        .sheet(isPresented: $showReport) {
+            ReportSheet(
+                pollID: poll.id,
+                reporterUserID: dummyUserID,
+                onDone: {
+                    showReportThanks = true
+                }
+            )
+            .presentationDetents([.medium, .large])
+        }
+        .alert("ご協力ありがとうございます", isPresented: $showReportThanks) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("不適切な投稿の通報を受け付けました。確認までしばらくお待ちください。")
+        }
+        .alert("この投稿を削除しますか？", isPresented: $showDeleteConfirm) {
+            Button("キャンセル", role: .cancel) {}
+            Button(deleting ? "削除中…" : "削除", role: .destructive) {
+                Task {
+                    deleting = true
+                    defer { deleting = false }
+                    do {
+                        try await PollAPI.softDeleteOwnPoll(pollID: poll.id)
+                        NotificationCenter.default.post(
+                            name: .pollDidDelete,
+                            object: nil,
+                            userInfo: [AppNotificationKey.pollID: poll.id]
+                        )
+                        dismiss()
+                    } catch {
+                        deleteError = "削除に失敗しました。時間を置いてお試しください。"
+                    }
+                }
+            }
+        } message: {
+            Text("削除すると他のユーザーからは見えなくなります（通報・ログは保持されます）。")
+        }
+        .alert("エラー", isPresented: .constant(deleteError != nil)) {
+            Button("OK") { deleteError = nil }
+        } message: {
+            Text(deleteError ?? "")
+        }
         .task {
             await loadOptions()
+
+            // 投稿者の絵文字を取得（あれば表示に反映）
+            if let owner = poll.owner_id {
+                do {
+                    let emoji = try await PollAPI.fetchOwnerEmoji(userID: owner)
+                    await MainActor.run { self.ownerEmoji = emoji }
+                } catch {
+                    // 絵文字取得失敗は致命的ではないので握りつぶす
+                }
+            }
 
             do {
                 let map = try await PollAPI.fetchUserVoteDetailMap(pollIDs: [poll.id], userID: dummyUserID)
@@ -339,12 +706,21 @@ struct PollDetailView: View {
                         await MainActor.run { self.myChoiceLabel = chosen.displayText }
                     }
                     await loadResults()
+                    if colorizeByGender { await loadGenderBreakdown() }
+                    if colorizeByAge { await loadAgeBreakdown() }
                     await MainActor.run { self.showResults = true }
                 }
             }
         }
-        .onChange(of: genderFilter) { _ in
-            Task { await loadResults() }
+        .onChange(of: colorizeByGender) { on in
+            Task {
+                if on { await loadGenderBreakdown() }
+            }
+        }
+        .onChange(of: colorizeByAge) { on in
+            Task {
+                if on { await loadAgeBreakdown() }
+            }
         }
     }
 
@@ -363,7 +739,12 @@ struct PollDetailView: View {
 
     @MainActor private func loadResults() async {
         do {
-            let rows = try await PollAPI.fetchResults(for: poll.id)
+            let rows = try await PollAPI.fetchResults(
+                for: poll.id,
+                gender: nil,
+                ageMin: nil,
+                ageMax: nil
+            )
             results = rows
             totalVotes = rows.reduce(0) { $0 + $1.count }
         } catch {
@@ -384,6 +765,8 @@ struct PollDetailView: View {
                 myChoiceLabel = chosen.displayText
             }
             await loadResults()
+            if colorizeByGender { await loadGenderBreakdown() }
+            if colorizeByAge { await loadAgeBreakdown() }
             showResults = true
             NotificationCenter.default.post(
                 name: .pollDidVote,
@@ -396,6 +779,26 @@ struct PollDetailView: View {
             )
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor private func loadGenderBreakdown() async {
+        do {
+            let list = try await PollAPI.fetchGenderBreakdown(for: poll.id, ageMin: nil, ageMax: nil)
+            genderBreakdown = Dictionary(uniqueKeysWithValues: list.map { ($0.option_id, $0) })
+        } catch {
+            genderBreakdown = [:]
+        }
+    }
+
+    @MainActor private func loadAgeBreakdown() async {
+        do {
+            // 年代色分けは「全バケットの可視化」という意味合いなので、
+            // 年齢フィルタは適用せず、必要に応じて性別フィルタだけ反映
+            let list = try await PollAPI.fetchAgeBreakdown(for: poll.id, gender: genderFilter.apiValue)
+            ageBreakdown = Dictionary(uniqueKeysWithValues: list.map { ($0.option_id, $0) })
+        } catch {
+            ageBreakdown = [:]
         }
     }
 

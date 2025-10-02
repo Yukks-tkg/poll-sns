@@ -27,6 +27,22 @@ struct PollTimelineView: View {
         ("pets", "🐾 ペット"),
         ("other", "🌀 その他")
     ]
+    private func displayCategory(_ key: String) -> String {
+        let map: [String: String] = [
+            "all": "すべて",
+            "food": "🍔 ごはん",
+            "fashion": "👗 ファッション",
+            "health": "🏃 健康",
+            "hobby": "🎮 趣味",
+            "travel": "✈️ 旅行",
+            "relationship": "💬 人間関係",
+            "school_work": "🏫 仕事/学校",
+            "daily": "🧺 日常",
+            "pets": "🐾 ペット",
+            "other": "🌀 その他"
+        ]
+        return map[key] ?? key
+    }
 
     private var sortBar: some View {
         HStack(spacing: 12) {
@@ -43,6 +59,7 @@ struct PollTimelineView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
+        .padding(.bottom, 10)
     }
 
     var body: some View {
@@ -54,12 +71,29 @@ struct PollTimelineView: View {
                         PollDetailView(poll: poll)
                     } label: {
                         HStack(alignment: .center, spacing: 12) {
-                            // 共通行表示（投票済みバッジ & あなたの選択ラベル対応）
-                            PollRow(
-                                poll: poll,
-                                isVoted: votedSet.contains(poll.id),
-                                myChoiceLabel: myChoiceMap[poll.id]
-                            )
+                            // 左側：PollRow の下に「ジャンル・時刻」を追加
+                            VStack(alignment: .leading, spacing: 4) {
+                                // 既存のタイトル・あなたの選択など
+                                PollRow(
+                                    poll: poll,
+                                    isVoted: votedSet.contains(poll.id),
+                                    myChoiceLabel: myChoiceMap[poll.id]
+                                )
+                                // 追加: ジャンル & 作成時刻
+                                HStack(spacing: 8) {
+                                    Text(displayCategory(poll.category))
+                                        .font(.caption2)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color(.systemGray6))
+                                        .clipShape(Capsule())
+                                    if let t = poll.createdAtFormatted {
+                                        Text(t)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
 
                             // 右側：いいねボタン（既存）
                             let count = likeCounts[poll.id] ?? 0
@@ -87,7 +121,7 @@ struct PollTimelineView: View {
                 .listStyle(.plain)
                 .refreshable { await load() }
             }
-            .navigationTitle("Timeline")
+            .navigationTitle("タイムライン")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
@@ -100,6 +134,24 @@ struct PollTimelineView: View {
             .task { await load() }
             .onReceive(NotificationCenter.default.publisher(for: .pollDidVote)) { _ in
                 Task { await reloadTimeline() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .pollDidDelete).receive(on: RunLoop.main)) { note in
+                // IDは UUID or String どちらでも受け取れるようにする
+                let extractedID: UUID? = {
+                    if let any = note.userInfo?["pollID"] {
+                        if let u = any as? UUID { return u }
+                        if let s = any as? String { return UUID(uuidString: s) }
+                    }
+                    return nil
+                }()
+                guard let id = extractedID else { return }
+                Task { @MainActor in
+                    withAnimation {
+                        polls.removeAll { $0.id == id }
+                    }
+                    // 任意：サーバー状態とも同期
+                    await reloadTimeline()
+                }
             }
             .onChange(of: sortOrder) { _ in
                 Task { await load() }
@@ -135,7 +187,7 @@ struct PollTimelineView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.vertical, 12)
         }
     }
 

@@ -30,10 +30,18 @@ extension JSONDecoder {
 }
 
 enum PollAPI {
+    // MARK: - Supabase Headers Helper
+    /// Adds required Supabase headers to a URLRequest (Accept, apikey, Authorization).
+    private static func addSupabaseHeaders(to req: inout URLRequest) {
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+    }
     // MARK: - Profiles model
     struct UserProfile: Codable {
         let user_id: UUID
         let username: String
+        let gender: String?
         let age: Int?
         let prefecture_code: String?
         let country_code: String?
@@ -59,6 +67,22 @@ enum PollAPI {
         "other",
         "prefer_not_to_say"
     ]
+
+    // MARK: - Reports (reason enum)
+    enum ReportReason: String, CaseIterable {
+        case spam, hate, nsfw, illegal, privacy, other
+
+        var display: String {
+            switch self {
+            case .spam: return "スパム・宣伝"
+            case .hate: return "差別・中傷"
+            case .nsfw: return "不快・アダルト"
+            case .illegal: return "違法・危険"
+            case .privacy: return "個人情報"
+            case .other: return "その他"
+            }
+        }
+    }
 
     // MARK: - Filtered results (k-anonymity aware via RPC)
     struct PollResultFilters: Encodable {
@@ -142,7 +166,7 @@ enum PollAPI {
         comps.path = "/rest/v1/profiles"
         comps.queryItems = [
             URLQueryItem(name: "user_id", value: "eq.\(userID.uuidString.lowercased())"),
-            URLQueryItem(name: "select", value: "user_id,username,age,prefecture_code,country_code,occupation,avatar_type,avatar_value,avatar_color,created_at"),
+            URLQueryItem(name: "select", value: "user_id,username,gender,age,prefecture_code,country_code,occupation,avatar_type,avatar_value,avatar_color,created_at"),
             URLQueryItem(name: "limit", value: "1")
         ]
         let url = comps.url!
@@ -175,6 +199,13 @@ enum PollAPI {
         }
     }
 
+    /// 投稿者のアバター絵文字だけ欲しいときの軽量ヘルパー
+    /// fetchProfile の薄いラッパー（将来スキーマ変更時の影響を局所化）
+    static func fetchOwnerEmoji(userID: UUID) async throws -> String? {
+        let profile = try await fetchProfile(userID: userID)
+        return profile?.avatar_value
+    }
+
     /// プロフィールの Upsert（存在すれば更新、無ければ作成）
     /// - Returns: 反映後のプロフィール
     static func upsertProfile(userID: UUID, input: ProfileInput) async throws -> UserProfile {
@@ -199,8 +230,12 @@ enum PollAPI {
         if let v = input.occupation, allowedOccupation.contains(v) {
             body["occupation"] = v
         }
+        // gender を保存（DB 側のチェック制約に合わせて許可値のみ）
+        if let v = input.gender, ["male","female","other"].contains(v) {
+            body["gender"] = v
+        }
         if let v = input.prefecture { body["prefecture_code"] = v }
-        // gender は現在のテーブルに無い想定なので送らない
+        // gender は上で送信済み（任意）
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -226,11 +261,295 @@ enum PollAPI {
 
     // JSONDecoder 拡張（未定義なら追加）
 
+    // Helper for gender-filtered aggregation: join votes with profiles(gender)
+    private struct RawVoteWithProfile: Decodable {
+        let option_id: UUID
+        struct ProfileStub: Decodable { let gender: String? }
+        let profiles: ProfileStub?
+    }
+
     // MARK: - Results (client-side aggregation)
-    static func fetchResults(for pollID: UUID) async throws -> [VoteResult] {
-        // Client-side aggregation version (no GROUP on server)
+
+    // Gender breakdown per option (male/female/other) with optional age range filter
+    struct GenderBreakdown: Identifiable {
+        let option_id: UUID
+        var male: Int
+        var female: Int
+        var other: Int
+        var total: Int { male + female + other }
+        var id: UUID { option_id }
+    }
+
+    /// 各選択肢ごとの性別内訳（male/female/other）を取得します。
+    /// 年齢フィルタ（ageMin/ageMax）が指定された場合は、該当年齢の投票のみを集計します。
+    static func fetchGenderBreakdown(for pollID: UUID, ageMin: Int? = nil, ageMax: Int? = nil) async throws -> [GenderBreakdown] {
+        // Step 1: votes から option_id と user_id を取得
+        struct VoteUIDRow: Decodable { let option_id: UUID; let user_id: UUID }
+        guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/votes"
+        comps.queryItems = [
+            URLQueryItem(name: "poll_id", value: "eq.\(pollID.uuidString.uppercased())"),
+            URLQueryItem(name: "select", value: "option_id,user_id"),
+            URLQueryItem(name: "limit", value: "10000")
+        ]
+        let votesURL = comps.url!
+        var votesReq = URLRequest(url: votesURL)
+        votesReq.httpMethod = "GET"
+        addSupabaseHeaders(to: &votesReq)
+        let (vData, vResp) = try await URLSession.shared.data(for: votesReq)
+        guard (vResp as? HTTPURLResponse).map({ (200...299).contains($0.statusCode) }) == true else {
+            throw URLError(.badServerResponse)
+        }
+        let votes = try JSONDecoder().decode([VoteUIDRow].self, from: vData)
+        if votes.isEmpty { return [] }
+
+        // Step 2: profiles から対象 user_id の gender/age を取得（URL長対策で分割）
+        let userIDs = Array(Set(votes.map(\.user_id)))
+        struct ProfileRow: Decodable { let user_id: UUID; let gender: String?; let age: Int? }
+        var genderMap: [UUID: String] = [:]
+        var ageMap: [UUID: Int] = [:]
+
+        let chunkSize = 200
+        for start in stride(from: 0, to: userIDs.count, by: chunkSize) {
+            let end = min(start + chunkSize, userIDs.count)
+            let chunk = userIDs[start..<end]
+            let inList = chunk.map { $0.uuidString.uppercased() }.joined(separator: ",")
+            var pComps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+            pComps.path = "/rest/v1/profiles"
+            pComps.queryItems = [
+                URLQueryItem(name: "user_id", value: "in.(\(inList))"),
+                URLQueryItem(name: "select", value: "user_id,gender,age"),
+                URLQueryItem(name: "limit", value: "\(chunk.count)")
+            ]
+            let profURL = pComps.url!
+            var profReq = URLRequest(url: profURL)
+            profReq.httpMethod = "GET"
+            addSupabaseHeaders(to: &profReq)
+            let (pData, pResp) = try await URLSession.shared.data(for: profReq)
+            guard (pResp as? HTTPURLResponse).map({ (200...299).contains($0.statusCode) }) == true else {
+                throw URLError(.badServerResponse)
+            }
+            let profiles = try JSONDecoder().decode([ProfileRow].self, from: pData)
+            for prof in profiles {
+                if let g = prof.gender { genderMap[prof.user_id] = g }
+                if let a = prof.age { ageMap[prof.user_id] = a }
+            }
+        }
+
+        // Step 3: option × gender で集計（必要なら年齢条件を適用）
+        var dict: [UUID: GenderBreakdown] = [:]
+        for v in votes {
+            // 年齢条件（片方だけの指定も考慮）
+            if let minA = ageMin {
+                guard let a = ageMap[v.user_id], a >= minA else { continue }
+            }
+            if let maxA = ageMax {
+                guard let a = ageMap[v.user_id], a <= maxA else { continue }
+            }
+
+            var gb = dict[v.option_id] ?? GenderBreakdown(option_id: v.option_id, male: 0, female: 0, other: 0)
+            switch genderMap[v.user_id] {
+            case "male":   gb.male += 1
+            case "female": gb.female += 1
+            case "other":  gb.other += 1
+            default:       break // 性別未設定ユーザーは集計から除外（必要なら other 扱いに変更）
+            }
+            dict[v.option_id] = gb
+        }
+        return Array(dict.values)
+    }
+
+    // Age breakdown per option (10代/20代/30代/40代/50代以上)
+    struct AgeBreakdown: Identifiable {
+        let option_id: UUID
+        var teens: Int
+        var twenties: Int
+        var thirties: Int
+        var forties: Int
+        var fiftiesPlus: Int
+        var total: Int { teens + twenties + thirties + forties + fiftiesPlus }
+        var id: UUID { option_id }
+    }
+
+    /// 各選択肢ごとの年代内訳（10/20/30/40/50+）を取得します。
+    /// gender を指定した場合は、該当性別のみを集計します（nil なら全体）。
+    /// 既存コードへ影響しないように新規 API として追加。
+    static func fetchAgeBreakdown(for pollID: UUID, gender: String? = nil) async throws -> [AgeBreakdown] {
+        // Step 1: votes から option_id と user_id を取得
+        struct VoteUIDRow: Decodable { let option_id: UUID; let user_id: UUID }
+        guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/votes"
+        comps.queryItems = [
+            URLQueryItem(name: "poll_id", value: "eq.\(pollID.uuidString.uppercased())"),
+            URLQueryItem(name: "select", value: "option_id,user_id"),
+            URLQueryItem(name: "limit", value: "10000")
+        ]
+        let votesURL = comps.url!
+        var votesReq = URLRequest(url: votesURL)
+        votesReq.httpMethod = "GET"
+        addSupabaseHeaders(to: &votesReq)
+        let (vData, vResp) = try await URLSession.shared.data(for: votesReq)
+        guard (vResp as? HTTPURLResponse).map({ (200...299).contains($0.statusCode) }) == true else {
+            throw URLError(.badServerResponse)
+        }
+        let votes = try JSONDecoder().decode([VoteUIDRow].self, from: vData)
+        if votes.isEmpty { return [] }
+
+        // Step 2: profiles から対象 user_id の age/gender を取得（URL長対策で分割）
+        let userIDs = Array(Set(votes.map(\.user_id)))
+        struct ProfileRow: Decodable { let user_id: UUID; let age: Int?; let gender: String? }
+        var ageMap: [UUID: Int] = [:]
+        var genderMap: [UUID: String] = [:]
+
+        let chunkSize = 200
+        for start in stride(from: 0, to: userIDs.count, by: chunkSize) {
+            let end = min(start + chunkSize, userIDs.count)
+            let chunk = userIDs[start..<end]
+            let inList = chunk.map { $0.uuidString.uppercased() }.joined(separator: ",")
+            var pComps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+            pComps.path = "/rest/v1/profiles"
+            pComps.queryItems = [
+                URLQueryItem(name: "user_id", value: "in.(\(inList))"),
+                URLQueryItem(name: "select", value: "user_id,age,gender"),
+                URLQueryItem(name: "limit", value: "\(chunk.count)")
+            ]
+            let profURL = pComps.url!
+            var profReq = URLRequest(url: profURL)
+            profReq.httpMethod = "GET"
+            addSupabaseHeaders(to: &profReq)
+            let (pData, pResp) = try await URLSession.shared.data(for: profReq)
+            guard (pResp as? HTTPURLResponse).map({ (200...299).contains($0.statusCode) }) == true else {
+                throw URLError(.badServerResponse)
+            }
+            let profiles = try JSONDecoder().decode([ProfileRow].self, from: pData)
+            for prof in profiles {
+                if let a = prof.age { ageMap[prof.user_id] = a }
+                if let g = prof.gender { genderMap[prof.user_id] = g }
+            }
+        }
+
+        // Step 3: option × 年代バケットで集計（必要なら gender 条件を適用）
+        func bucket(for age: Int) -> Int? {
+            switch age {
+            case 10...19: return 10
+            case 20...29: return 20
+            case 30...39: return 30
+            case 40...49: return 40
+            case 50... :  return 50
+            default: return nil
+            }
+        }
+
+        var dict: [UUID: AgeBreakdown] = [:]
+        for v in votes {
+            if let needGender = gender {
+                // 性別条件：未設定は除外
+                guard let g = genderMap[v.user_id], g == needGender else { continue }
+            }
+            guard let age = ageMap[v.user_id], let b = bucket(for: age) else { continue }
+            var ab = dict[v.option_id] ?? AgeBreakdown(option_id: v.option_id, teens: 0, twenties: 0, thirties: 0, forties: 0, fiftiesPlus: 0)
+            switch b {
+            case 10: ab.teens += 1
+            case 20: ab.twenties += 1
+            case 30: ab.thirties += 1
+            case 40: ab.forties += 1
+            case 50: ab.fiftiesPlus += 1
+            default: break
+            }
+            dict[v.option_id] = ab
+        }
+        return Array(dict.values)
+    }
+    static func fetchResults(for pollID: UUID, gender: String? = nil, ageMin: Int? = nil, ageMax: Int? = nil) async throws -> [VoteResult] {
+        // If gender or age is specified, join profiles to read gender/age and aggregate client-side
+        if (gender != nil) || (ageMin != nil) || (ageMax != nil) {
+            let genderParam = gender // capture for inner use
+            // Step 1: votes から option_id と user_id を取得
+            struct VoteUIDRow: Decodable { let option_id: UUID; let user_id: UUID }
+            guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
+            var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+            comps.path = "/rest/v1/votes"
+            comps.queryItems = [
+                URLQueryItem(name: "poll_id", value: "eq.\(pollID.uuidString.uppercased())"),
+                URLQueryItem(name: "select", value: "option_id,user_id"),
+                URLQueryItem(name: "limit", value: "10000")
+            ]
+            let votesURL = comps.url!
+            print("RESULTS(by gender) votes URL:", votesURL.absoluteString)
+            var votesReq = URLRequest(url: votesURL)
+            votesReq.httpMethod = "GET"
+            addSupabaseHeaders(to: &votesReq)
+            let (vData, vResp) = try await URLSession.shared.data(for: votesReq)
+            let vCode = (vResp as? HTTPURLResponse)?.statusCode ?? -1
+            print("RESULTS(by gender) votes HTTP:", vCode)
+            guard (200...299).contains(vCode) else {
+                print("RESULTS(by gender) votes RAW:", String(data: vData, encoding: .utf8) ?? "<binary>")
+                throw URLError(.badServerResponse)
+            }
+            let voteRows = try JSONDecoder().decode([VoteUIDRow].self, from: vData)
+            if voteRows.isEmpty { return [] }
+
+            // Step 2: profiles から対象 user_id の gender/age を取得（URL長対策で分割）
+            let userIDs = Array(Set(voteRows.map { $0.user_id }))
+            struct ProfileRow: Decodable { let user_id: UUID; let gender: String?; let age: Int? }
+            var genderMap: [UUID: String] = [:]
+            var ageMap: [UUID: Int] = [:]
+
+            let chunkSize = 200
+            for start in stride(from: 0, to: userIDs.count, by: chunkSize) {
+                let end = min(start + chunkSize, userIDs.count)
+                let chunk = userIDs[start..<end]
+                let inList = chunk.map { $0.uuidString.uppercased() }.joined(separator: ",")
+                var pComps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+                pComps.path = "/rest/v1/profiles"
+                pComps.queryItems = [
+                    URLQueryItem(name: "user_id", value: "in.(\(inList))"),
+                    URLQueryItem(name: "select", value: "user_id,gender,age"),
+                    URLQueryItem(name: "limit", value: "\(chunk.count)")
+                ]
+                let profURL = pComps.url!
+                print("RESULTS(by gender/age) profiles URL:", profURL.absoluteString)
+                var profReq = URLRequest(url: profURL)
+                profReq.httpMethod = "GET"
+                addSupabaseHeaders(to: &profReq)
+                let (pData, pResp) = try await URLSession.shared.data(for: profReq)
+                let pCode = (pResp as? HTTPURLResponse)?.statusCode ?? -1
+                print("RESULTS(by gender/age) profiles HTTP:", pCode)
+                guard (200...299).contains(pCode) else {
+                    print("RESULTS(by gender/age) profiles RAW:", String(data: pData, encoding: .utf8) ?? "<binary>")
+                    throw URLError(.badServerResponse)
+                }
+                let profiles = try JSONDecoder().decode([ProfileRow].self, from: pData)
+                for prof in profiles {
+                    if let g = prof.gender { genderMap[prof.user_id] = g }
+                    if let a = prof.age { ageMap[prof.user_id] = a }
+                }
+            }
+
+            // Step 3: 指定 gender/age のみ集計
+            var counter: [UUID: Int] = [:]
+            for r in voteRows {
+                // Gender filter
+                if let gNeeded = genderParam {
+                    guard genderMap[r.user_id] == gNeeded else { continue }
+                }
+                // Age filters
+                if let minA = ageMin {
+                    guard let a = ageMap[r.user_id], a >= minA else { continue }
+                }
+                if let maxA = ageMax {
+                    guard let a = ageMap[r.user_id], a <= maxA else { continue }
+                }
+                counter[r.option_id, default: 0] += 1
+            }
+            return counter.map { VoteResult(option_id: $0.key, count: $0.value) }
+                .sorted { $0.count > $1.count }
+        }
+
+        // gender が無い場合は、従来通り option_id だけを取得して端末で集計
         struct VoteRow: Decodable { let option_id: UUID }
-        
         guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
         comps.path = "/rest/v1/votes"
@@ -239,16 +558,16 @@ enum PollAPI {
             URLQueryItem(name: "select", value: "option_id"),
             URLQueryItem(name: "limit", value: "10000")
         ]
-        
+
         let url = comps.url!
         print("RESULTS URL:", url.absoluteString)
-        
+
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
         req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
-        
+
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
         print("RESULTS HTTP status:", code)
@@ -256,7 +575,7 @@ enum PollAPI {
             print("RESULTS RAW response:", String(data: data, encoding: .utf8) ?? "<binary>")
             throw URLError(.badServerResponse)
         }
-        
+
         let rows = try JSONDecoder().decode([VoteRow].self, from: data)
         var counter: [UUID: Int] = [:]
         for r in rows { counter[r.option_id, default: 0] += 1 }
@@ -279,7 +598,7 @@ enum PollAPI {
     /// 将来、サーバー側集計（RPC）に切り替える際は、ここで `filters` を使って
     /// `fetchFilteredResults(pollID:filters:)` を呼ぶように差し替えます。
     static func fetchResults(pollID: UUID, filter: ResultFilter?) async throws -> (rows: [VoteResult], total: Int) {
-        let rows = try await fetchResults(for: pollID)
+        let rows = try await fetchResults(for: pollID, gender: nil)
         let total = rows.reduce(0) { $0 + $1.count }
         return (rows, total)
     }
@@ -553,6 +872,40 @@ enum PollAPI {
         print("DELETE poll HTTP:", code)
     }
 
+    // MARK: - Soft delete (set deleted_at)
+    /// 自分の投稿をソフト削除（deleted_at を現在時刻でセット）
+    static func softDeleteOwnPoll(pollID: UUID) async throws {
+        guard let base = URL(string: AppConfig.supabaseURL) else { throw URLError(.badURL) }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/polls"
+        comps.queryItems = [
+            URLQueryItem(name: "id", value: "eq.\(pollID.uuidString.uppercased())")
+        ]
+        let url = comps.url!
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "PATCH"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+
+        // クライアント時刻で十分。サーバー時刻にしたい場合は RPC を用意して now() を使う。
+        let iso = ISO8601DateFormatter()
+        let body: [String: Any] = ["deleted_at": iso.string(from: Date())]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        if !(200...299).contains(code) {
+            #if DEBUG
+            print("SOFT DELETE HTTP:", code)
+            print("SOFT DELETE RAW:", String(data: data, encoding: .utf8) ?? "<binary>")
+            #endif
+            throw URLError(.badServerResponse)
+        }
+    }
+
     // MARK: - Vote (Upsert: duplicate -> 2xx)
     static func submitVote(pollID: UUID, optionID: UUID, userID: UUID) async throws {
         guard let base = URL(string: AppConfig.supabaseURL) else { return }
@@ -608,7 +961,8 @@ enum PollAPI {
         var items: [URLQueryItem] = [
             URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id"),
             URLQueryItem(name: "order", value: order),
-            URLQueryItem(name: "limit", value: "\(limit)")
+            URLQueryItem(name: "limit", value: "\(limit)"),
+            URLQueryItem(name: "deleted_at", value: "is.null")
         ]
         if let cat = category, !cat.isEmpty {
             items.append(URLQueryItem(name: "category", value: "eq.\(cat)"))
@@ -665,6 +1019,58 @@ enum PollAPI {
             throw URLError(.badServerResponse)
         }
         return try JSONDecoder().decode([Poll].self, from: data)
+    }
+
+    // MARK: - Reports
+    /// 通報を送信（Upsertで重複は成功扱い）
+    static func submitReport(
+        pollID: UUID,
+        reporterUserID: UUID,
+        reason: ReportReason,
+        detail: String? = nil
+    ) async throws {
+        // Build: /rest/v1/reports?on_conflict=poll_id,reporter_user_id
+        guard let base = URL(string: AppConfig.supabaseURL) else { throw URLError(.badURL) }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/reports"
+        comps.queryItems = [
+            URLQueryItem(name: "on_conflict", value: "poll_id,reporter_user_id")
+        ]
+        let url = comps.url!
+
+        // PostgREST upsert payload (array of rows)
+        let body: [[String: Any]] = [[
+            "poll_id": pollID.uuidString.uppercased(),
+            "reporter_user_id": reporterUserID.uuidString.uppercased(),
+            "reason_code": reason.rawValue,
+            "reason_text": detail ?? NSNull()
+        ]]
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        // 重複（既に同じ user が同じ poll を通報）でも 2xx で返す
+        req.setValue("resolution=ignore-duplicates", forHTTPHeaderField: "Prefer")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+
+        switch code {
+        case 200, 201, 204:
+            return
+        default:
+            #if DEBUG
+            print("REPORT HTTP:", code)
+            if let s = String(data: data, encoding: .utf8) {
+                print("REPORT RAW:", s)
+            }
+            #endif
+            throw URLError(.badServerResponse)
+        }
     }
 
     // MARK: - Likes
@@ -852,7 +1258,8 @@ enum PollAPI {
             URLQueryItem(name: "id", value: "in.(\(idList))"),
             URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id"),
             URLQueryItem(name: "order", value: "created_at.desc"),
-            URLQueryItem(name: "limit", value: "\(ids.count)")
+            URLQueryItem(name: "limit", value: "\(ids.count)"),
+            URLQueryItem(name: "deleted_at", value: "is.null")
         ]
 
         var req = URLRequest(url: comps.url!)
@@ -884,7 +1291,8 @@ enum PollAPI {
             URLQueryItem(name: "owner_id", value: "eq.\(ownerID.uuidString.uppercased())"),
             URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id"),
             URLQueryItem(name: "order", value: order),
-            URLQueryItem(name: "limit", value: "\(limit)")
+            URLQueryItem(name: "limit", value: "\(limit)"),
+            URLQueryItem(name: "deleted_at", value: "is.null")
         ]
 
         let url = comps.url!
@@ -945,7 +1353,8 @@ enum PollAPI {
             URLQueryItem(name: "id", value: "in.(\(inList))"),
             URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id"),
             URLQueryItem(name: "order", value: order),
-            URLQueryItem(name: "limit", value: "\(limit)")
+            URLQueryItem(name: "limit", value: "\(limit)"),
+            URLQueryItem(name: "deleted_at", value: "is.null")
         ]
 
         let url = comps.url!

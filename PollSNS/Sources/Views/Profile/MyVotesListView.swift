@@ -1,4 +1,3 @@
-
 import SwiftUI
 import Combine
 
@@ -7,6 +6,23 @@ struct MyVotesListView: View {
     @State private var polls: [Poll] = []
     @State private var error: String?
     @State private var loading = false
+
+    private func displayCategory(_ key: String) -> String {
+        let map: [String: String] = [
+            "all": "すべて",
+            "food": "🍔 ごはん",
+            "fashion": "👗 ファッション",
+            "health": "🏃 健康",
+            "hobby": "🎮 趣味",
+            "travel": "✈️ 旅行",
+            "relationship": "💬 人間関係",
+            "school_work": "🏫 仕事/学校",
+            "daily": "🧺 日常",
+            "pets": "🐾 ペット",
+            "other": "🌀 その他"
+        ]
+        return map[key] ?? key
+    }
 
     var body: some View {
         List {
@@ -50,10 +66,11 @@ struct MyVotesListView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(p.question)
                                     .font(.body)
+                                    .fontWeight(.semibold)
                                     .foregroundStyle(.primary)
                                     .lineLimit(2)
                                 HStack(spacing: 8) {
-                                    Text(p.category)
+                                    Text(displayCategory(p.category))
                                         .font(.caption2)
                                         .padding(.horizontal, 6).padding(.vertical, 2)
                                         .background(Color(.systemGray6))

@@ -1,5 +1,10 @@
 import SwiftUI
 
+extension Notification.Name {
+    /// ルートのタブを「タイムライン」に切り替えるための通知
+    static let switchToTimeline = Notification.Name("switchToTimeline")
+}
+
 struct NewPollView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -91,10 +96,13 @@ struct NewPollView: View {
                 }
             }
         }
-        .navigationTitle("新規Poll")
+        .navigationTitle("新規アンケート")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("キャンセル") { dismiss() }
+                Button("キャンセル") {
+                    NotificationCenter.default.post(name: .switchToTimeline, object: nil)
+                    dismiss()
+                }
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button(isSubmitting ? "作成中…" : "投稿") {

@@ -42,5 +42,8 @@ struct RootTabView: View {
             }
             .tag(2)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .switchToTimeline)) { _ in
+            selected = 0
+        }
     }
 }

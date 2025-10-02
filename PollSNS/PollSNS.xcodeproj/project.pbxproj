@@ -58,6 +58,7 @@
 				Profile/ProfileEditView.swift,
 				Profile/ProfileView.swift,
 				Profile/SettingsSheet.swift,
+				Report/ReportSheet.swift,
 				RootTabView.swift,
 				Shared/PollRow.swift,
 			);
@@ -68,6 +69,7 @@
 			membershipExceptions = (
 				Poll.swift,
 				PollOption.swift,
+				ReportReason.swift,
 				VoteResult.swift,
 			);
 			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
@@ -151,6 +153,11 @@
 			path = Legal;
 			sourceTree = "<group>";
 		};
+		02F2CE892E8CFD5900B080A7 /* Common */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Common;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -224,6 +231,7 @@
 		0242C2392E7BB8D00065FDEE /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				02F2CE892E8CFD5900B080A7 /* Common */,
 				02F2CE6D2E8A2BAC00B080A7 /* Utils */,
 				02F2CE372E7C63D800B080A7 /* Views */,
 				02F2CE352E7C2FB600B080A7 /* API */,

@@ -37,15 +37,6 @@ struct SettingsSheet: View {
                 // Section("設定") {
                 //     Toggle("通知を受け取る", isOn: .constant(true))
                 // }
-
-                Section {
-                    Button(role: .destructive) {
-                        // Auth導入後にログアウト処理を実装
-                    } label: {
-                        Text("ログアウト")
-                    }
-                    .disabled(true) // いまは未対応のため無効化
-                }
             }
             .navigationTitle("設定")
             .navigationBarTitleDisplayMode(.inline)
