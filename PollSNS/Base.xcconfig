@@ -1,0 +1,5 @@
+//
+// Base.xcconfig — 常に存在する設定
+// CIで作る GeneratedSecrets.xcconfig が無くてもビルドが落ちないよう optional include を使う
+//
+#include? "GeneratedSecrets.xcconfig"
