@@ -3,7 +3,7 @@ import WebKit
 
 struct LegalDocumentView: View {
     let title: String
-    let htmlFileName: String // 例: "terms-ja", "privacy-ja"
+    let htmlFileName: String
 
     var body: some View {
         WebView(htmlFileName: htmlFileName)
@@ -25,9 +25,9 @@ private struct WebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // 1) Legal サブディレクトリを探す（青フォルダの場合）
+
         let urlInLegal = Bundle.main.url(forResource: htmlFileName, withExtension: "html", subdirectory: "Legal")
-        // 2) ルート直下も探す（黄色フォルダの場合）
+
         let urlInRoot = Bundle.main.url(forResource: htmlFileName, withExtension: "html")
 
         if let url = urlInLegal ?? urlInRoot {

@@ -109,7 +109,6 @@ struct MyVotesListView: View {
     }
 }
 
-// プレビュー（任意）
 #Preview {
-    MyVotesListView(userID: AppConfig.devUserID)
+    MyVotesListView(userID: AppConfig.currentUserID)
 }

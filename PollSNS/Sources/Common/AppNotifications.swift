@@ -1,7 +1,7 @@
-// Sources/Common/AppNotifications.swift（新規推奨）
 import Foundation
 
 extension Notification.Name {
+    
     static let pollDidSoftDelete = Notification.Name("pollDidSoftDelete")
 }
 

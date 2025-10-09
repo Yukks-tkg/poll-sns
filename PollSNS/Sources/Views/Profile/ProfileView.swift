@@ -1,10 +1,3 @@
-//
-//  ProfileView.swift
-//  PollSNS
-//
-//  Created by 高木祐輝 on 2025/09/26.
-//
-
 import SwiftUI
 
 struct ProfileView: View {
@@ -17,14 +10,10 @@ struct ProfileView: View {
     @State private var hasAttemptedLoad = false
 
     var body: some View {
-        // NOTE: Large titleが確実に出るよう、最上位は ScrollView ではなく
-        // VStack + 下層の List をスクロールコンテナにします。
         VStack(spacing: 0) {
-            // ヘッダー（固定表示）
             profileCard
                 .frame(height: 200)
 
-            // セグメント
             Picker("", selection: $selectedSegment) {
                 Text("自分の投稿").tag(0)
                 Text("自分の投票").tag(1)
@@ -33,15 +22,14 @@ struct ProfileView: View {
             .padding(.horizontal)
             .padding(.bottom, 8)
 
-            // コンテンツ（List を入れ替えず同一コンテナで可視切替）
             ZStack {
-                MyPostsListView(ownerID: AppConfig.devUserID)
+                MyPostsListView(ownerID: AppConfig.currentUserID)
                     .listStyle(.plain)
                     .opacity(selectedSegment == 0 ? 1 : 0)
                     .allowsHitTesting(selectedSegment == 0)
                     .zIndex(selectedSegment == 0 ? 1 : 0)
 
-                MyVotesListView(userID: AppConfig.devUserID)
+                MyVotesListView(userID: AppConfig.currentUserID)
                     .listStyle(.plain)
                     .opacity(selectedSegment == 1 ? 1 : 0)
                     .allowsHitTesting(selectedSegment == 1)
@@ -136,12 +124,10 @@ struct ProfileView: View {
         guard let profile = profile else { return "" }
         var details: [String] = []
 
-        // 年齢
         if let age = profile.age {
             details.append("\(age)歳")
         }
 
-        // 性別
         if let g = profile.gender, !g.isEmpty {
             details.append(genderLabel(for: g))
         }
@@ -161,50 +147,6 @@ struct ProfileView: View {
         }
     }
 
-    private func prefectureName(for raw: String) -> String {
-        // Map with zero-padded keys (01..47)
-        let prefectures: [String: String] = [
-            "01": "北海道", "02": "青森県", "03": "岩手県", "04": "宮城県", "05": "秋田県",
-            "06": "山形県", "07": "福島県", "08": "茨城県", "09": "栃木県", "10": "群馬県",
-            "11": "埼玉県", "12": "千葉県", "13": "東京都", "14": "神奈川県", "15": "新潟県",
-            "16": "富山県", "17": "石川県", "18": "福井県", "19": "山梨県", "20": "長野県",
-            "21": "岐阜県", "22": "静岡県", "23": "愛知県", "24": "三重県", "25": "滋賀県",
-            "26": "京都府", "27": "大阪府", "28": "兵庫県", "29": "奈良県", "30": "和歌山県",
-            "31": "鳥取県", "32": "島根県", "33": "岡山県", "34": "広島県", "35": "山口県",
-            "36": "徳島県", "37": "香川県", "38": "愛媛県", "39": "高知県", "40": "福岡県",
-            "41": "佐賀県", "42": "長崎県", "43": "熊本県", "44": "大分県", "45": "宮崎県",
-            "46": "鹿児島県", "47": "沖縄県"
-        ]
-
-        // If the DB already stores a full prefecture name (e.g. "東京都"), use it as-is
-        if prefectures.values.contains(raw) || raw.hasSuffix("都") || raw.hasSuffix("道") || raw.hasSuffix("府") || raw.hasSuffix("県") {
-            return raw
-        }
-
-        // Accept either "01".."47" or "1".."47"
-        if let n = Int(raw), (1...47).contains(n) {
-            let key = String(format: "%02d", n)
-            return prefectures[key] ?? "未設定"
-        }
-        return prefectures[raw] ?? "未設定"
-    }
-
-    private func occupationLabel(for code: String) -> String {
-        switch code {
-        case "student": return "学生"
-        case "employee_fulltime": return "会社員"
-        case "employee_contract": return "契約社員"
-        case "part_time": return "パート・アルバイト"
-        case "freelancer", "self_employed": return "個人事業"
-        case "public_servant": return "公務員"
-        case "homemaker": return "専業主婦/主夫"
-        case "unemployed": return "無職"
-        case "other": return "その他"
-        case "prefer_not_to_say": return "回答しない"
-        default: return code
-        }
-    }
-
     private func loadProfile() async {
         if isLoadingProfile { print("PROFILE: already loading, skip"); return }
         await MainActor.run {
@@ -216,15 +158,15 @@ struct ProfileView: View {
             Task { await MainActor.run { isLoading = false; isLoadingProfile = false } }
         }
         do {
-            print("PROFILE: fetch start for user=\(AppConfig.devUserID.uuidString)")
-            let result = try await PollAPI.fetchProfile(userID: AppConfig.devUserID)
+            print("PROFILE: fetch start for user=\(AppConfig.currentUserID.uuidString)")
+            let result = try await PollAPI.fetchProfile(userID: AppConfig.currentUserID)
             await MainActor.run {
                 self.profile = result
                 self.errorMessage = nil
                 self.hasAttemptedLoad = true
             }
             if let p = result {
-                print("PROFILE: fetch ok username=\(p.username) age=\(p.age?.description ?? "nil") pref=\(p.prefecture_code ?? "nil") occ=\(p.occupation ?? "nil")")
+                print("PROFILE: fetch ok username=\(p.username) age=\(p.age?.description ?? "nil")")
             } else {
                 print("PROFILE: fetch ok but no profile row for user")
             }

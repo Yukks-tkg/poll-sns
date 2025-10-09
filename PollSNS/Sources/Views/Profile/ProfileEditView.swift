@@ -1,11 +1,9 @@
 import SwiftUI
 
-// MARK: - Models
-
 enum Gender: String, CaseIterable, Identifiable {
-    case male, female, other   // ★ DBに送るコード値（英語）
+    case male, female, other
     var id: String { rawValue }
-    var display: String {      // ★ UI表示用（日本語）
+    var display: String {
         switch self {
         case .male: return "男性"
         case .female: return "女性"
@@ -14,27 +12,12 @@ enum Gender: String, CaseIterable, Identifiable {
     }
 }
 
-enum Occupation: String, CaseIterable, Identifiable {
-    case student = "学生"
-    case companyEmployee = "会社員"
-    case selfEmployedFreelance = "個人事業・フリーランス"
-    case partTime = "パート・アルバイト"
-    case homemaker = "専業主婦／主夫"
-    case unemployed = "無職"
-    case other = "その他"
-    var id: String { rawValue }
-}
-
-// MARK: - Helpers
-
 private extension String {
-    /// 絵文字を含むかどうか（簡易判定）
     var containsEmoji: Bool {
         return unicodeScalars.contains { $0.properties.isEmoji && ($0.value > 0x238C) }
     }
 }
 
-/// バリデーション設定
 struct ProfileValidation {
     static let nicknameMin = 1
     static let nicknameMax = 20
@@ -48,45 +31,25 @@ struct ProfileValidation {
     }
 }
 
-// MARK: - Occupation (UI display ↔ code)
-struct OccupationItem { let code: String; let label: String }
-private let occupationItems: [OccupationItem] = [
-    .init(code: "student",            label: "学生"),
-    .init(code: "employee_fulltime",  label: "会社員（正社員）"),
-    .init(code: "employee_contract",  label: "会社員（契約・派遣）"),
-    .init(code: "part_time",          label: "パート・アルバイト"),
-    .init(code: "freelancer",         label: "フリーランス"),
-    .init(code: "self_employed",      label: "自営業"),
-    .init(code: "public_servant",     label: "公務員"),
-    .init(code: "homemaker",          label: "専業主婦／主夫"),
-    .init(code: "unemployed",         label: "無職"),
-    .init(code: "other",              label: "その他"),
-    .init(code: "prefer_not_to_say",  label: "回答しない")
-]
-
-// MARK: - View
-
 struct ProfileEditView: View {
     let userID: UUID
     let initialProfile: PollAPI.UserProfile?
     var onSaved: (() -> Void)? = nil
 
-    // 入力状態
     @State private var selectedAvatar: String = "👶"
     @State private var nickname: String = ""
     @State private var gender: Gender = .other
     @State private var age: Int = 20
     @State private var didPreload = false
 
-    // 画面制御
     @Environment(\.dismiss) private var dismiss
 
     private let avatarCandidates: [String] = [
-        // Animals
+
         "🐶","🐱","🐼","🦊","🐻","🦁","🐵","🐧","🐸","🦄",
-        // Foods
+
         "🍔","🍣","🍕","🍎","🍩","🍜","🍫","☕️",
-        // Faces (指定の3種含む)
+
         "👶","👧","🧒"
     ]
 
@@ -181,8 +144,6 @@ struct ProfileEditView: View {
             display_name: nickname,
             gender: gender.rawValue,
             age: age,
-            prefecture: nil,
-            occupation: nil,
             icon_emoji: selectedAvatar
         )
         Task {
@@ -197,12 +158,12 @@ struct ProfileEditView: View {
     }
 
     private func preload() async {
-        // 1) Use initialProfile if provided (faster)
+
         if let p = initialProfile {
             await MainActor.run { apply(profile: p) }
             return
         }
-        // 2) Otherwise fetch from server once
+
         do {
             if let p = try await PollAPI.fetchProfile(userID: userID) {
                 await MainActor.run { apply(profile: p) }
@@ -220,7 +181,6 @@ struct ProfileEditView: View {
     }
 }
 
-// MARK: - Preview
 #Preview {
     NavigationStack {
         ProfileEditView(userID: UUID(), initialProfile: nil)

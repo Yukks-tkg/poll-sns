@@ -43,9 +43,7 @@ enum PollAPI {
         let username: String
         let gender: String?
         let age: Int?
-        let prefecture_code: String?
         let country_code: String?
-        let occupation: String?
         let avatar_type: String?
         let avatar_value: String?
         let avatar_color: String?
@@ -53,20 +51,6 @@ enum PollAPI {
         let created_at: Date?
     }
 
-    // DBのCHECK制約に合わせた許可コード
-    private static let allowedOccupation: Set<String> = [
-        "student",
-        "employee_fulltime",
-        "employee_contract",
-        "part_time",
-        "freelancer",
-        "self_employed",
-        "public_servant",
-        "homemaker",
-        "unemployed",
-        "other",
-        "prefer_not_to_say"
-    ]
 
     // MARK: - Reports (reason enum)
     enum ReportReason: String, CaseIterable {
@@ -89,9 +73,7 @@ enum PollAPI {
         var minAge: Int? = nil
         var maxAge: Int? = nil
         var ageBucketWidth: Int = 7              // 5/7/10
-        var occupations: [String]? = nil         // ["student", "employee_fulltime", ...]
         var countryCode: String? = nil           // e.g., "JP"
-        var prefectureCode: String? = nil        // e.g., "13" (Tokyo), nil for unspecified
         var gender: String? = nil              // "male" | "female" | "other" | nil(=all)
 
         func toRPCBody(pollID: UUID) -> [String: Any] {
@@ -101,9 +83,7 @@ enum PollAPI {
             ]
             if let v = minAge { body["p_min_age"] = v }
             if let v = maxAge { body["p_max_age"] = v }
-            if let v = occupations, !v.isEmpty { body["p_occupations"] = v }
             if let v = countryCode { body["p_country_code"] = v }
-            if let v = prefectureCode { body["p_prefecture_code"] = v }
             if let v = gender { body["p_gender"] = v }
             return body
         }
@@ -141,8 +121,6 @@ enum PollAPI {
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
         if !(200...299).contains(code) {
-            let raw = String(data: data, encoding: .utf8) ?? "<binary>"
-            print("FILTERED RESULTS HTTP:", code, "RAW:", raw)
             throw URLError(.badServerResponse)
         }
         return try JSONDecoder.iso8601.decode([FilteredVoteRow].self, from: data)
@@ -154,8 +132,6 @@ enum PollAPI {
         var display_name: String?
         var gender: String?
         var age: Int?
-        var prefecture: String?
-        var occupation: String?
         var icon_emoji: String?
     }
 
@@ -166,11 +142,10 @@ enum PollAPI {
         comps.path = "/rest/v1/profiles"
         comps.queryItems = [
             URLQueryItem(name: "user_id", value: "eq.\(userID.uuidString.lowercased())"),
-            URLQueryItem(name: "select", value: "user_id,username,gender,age,prefecture_code,country_code,occupation,avatar_type,avatar_value,avatar_color,created_at"),
+            URLQueryItem(name: "select", value: "user_id,username,gender,age,country_code,avatar_type,avatar_value,avatar_color,created_at"),
             URLQueryItem(name: "limit", value: "1")
         ]
         let url = comps.url!
-        print("PROFILE URL:", url.absoluteString)
 
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
@@ -180,21 +155,13 @@ enum PollAPI {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        print("PROFILE HTTP:", code)
-        guard (200...299).contains(code) else {
-            let raw = String(data: data, encoding: .utf8) ?? "<binary>"
-            print("PROFILE RAW:", raw)
-            throw URLError(.badServerResponse)
-        }
+        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
 
         // profiles は配列で返る（0件のときは []）
         do {
             let rows = try JSONDecoder.iso8601.decode([UserProfile].self, from: data)
             return rows.first
         } catch {
-            // デコードエラー内容も出力しておく
-            print("PROFILE DECODE ERROR:", error.localizedDescription,
-                  "| RAW:", String(data: data, encoding: .utf8) ?? "<binary>")
             throw error
         }
     }
@@ -206,10 +173,38 @@ enum PollAPI {
         return profile?.avatar_value
     }
 
+    /// 確実に users テーブルに userID を作成（存在しても2xxでOK）
+    static func ensureUserExists(userID: UUID) async throws {
+        guard let base = URL(string: AppConfig.supabaseURL) else { throw URLError(.badURL) }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/users"
+        let url = comps.url!
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        req.setValue("resolution=merge-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
+        let body: [String: Any] = ["id": userID.uuidString.uppercased()]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (_, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        if !(200...299).contains(code) {
+            throw URLError(.badServerResponse)
+        }
+    }
+
     /// プロフィールの Upsert（存在すれば更新、無ければ作成）
     /// - Returns: 反映後のプロフィール
     static func upsertProfile(userID: UUID, input: ProfileInput) async throws -> UserProfile {
         guard let base = URL(string: AppConfig.supabaseURL) else { throw URLError(.badURL) }
+
+        // 先に users テーブルに自分の ID を作成（外部キー制約対策）
+        try await ensureUserExists(userID: userID)
+
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
         comps.path = "/rest/v1/profiles"
         // プロフィールは user_id を一意キーとして Upsert する
@@ -218,24 +213,18 @@ enum PollAPI {
         ]
         let url = comps.url!
 
-        // DB スキーマに合わせてキー名を変換する
+        // DBスキーマに合わせてキー名を変換する
         // - display_name  -> username
         // - icon_emoji    -> avatar_value
-        // - prefecture    -> prefecture_code
         // - country_code  は ProfileInput に無いので送らない（後で必要なら引数追加）
         var body: [String: Any] = ["user_id": userID.uuidString.uppercased()]
         if let v = input.display_name { body["username"] = v }
         if let v = input.icon_emoji { body["avatar_value"] = v }
         if let v = input.age { body["age"] = v }
-        if let v = input.occupation, allowedOccupation.contains(v) {
-            body["occupation"] = v
-        }
         // gender を保存（DB 側のチェック制約に合わせて許可値のみ）
         if let v = input.gender, ["male","female","other"].contains(v) {
             body["gender"] = v
         }
-        if let v = input.prefecture { body["prefecture_code"] = v }
-        // gender は上で送信済み（任意）
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -249,17 +238,12 @@ enum PollAPI {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        guard (200...299).contains(code) else {
-            let raw = String(data: data, encoding: .utf8) ?? "<binary>"
-            print("UPSERT PROFILE RAW:", raw)
-            throw URLError(.badServerResponse)
-        }
+        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
         let rows = try JSONDecoder.iso8601.decode([UserProfile].self, from: data)
         guard let profile = rows.first else { throw URLError(.cannotParseResponse) }
         return profile
     }
 
-    // JSONDecoder 拡張（未定義なら追加）
 
     // Helper for gender-filtered aggregation: join votes with profiles(gender)
     private struct RawVoteWithProfile: Decodable {
@@ -477,15 +461,12 @@ enum PollAPI {
                 URLQueryItem(name: "limit", value: "10000")
             ]
             let votesURL = comps.url!
-            print("RESULTS(by gender) votes URL:", votesURL.absoluteString)
             var votesReq = URLRequest(url: votesURL)
             votesReq.httpMethod = "GET"
             addSupabaseHeaders(to: &votesReq)
             let (vData, vResp) = try await URLSession.shared.data(for: votesReq)
             let vCode = (vResp as? HTTPURLResponse)?.statusCode ?? -1
-            print("RESULTS(by gender) votes HTTP:", vCode)
             guard (200...299).contains(vCode) else {
-                print("RESULTS(by gender) votes RAW:", String(data: vData, encoding: .utf8) ?? "<binary>")
                 throw URLError(.badServerResponse)
             }
             let voteRows = try JSONDecoder().decode([VoteUIDRow].self, from: vData)
@@ -510,15 +491,12 @@ enum PollAPI {
                     URLQueryItem(name: "limit", value: "\(chunk.count)")
                 ]
                 let profURL = pComps.url!
-                print("RESULTS(by gender/age) profiles URL:", profURL.absoluteString)
                 var profReq = URLRequest(url: profURL)
                 profReq.httpMethod = "GET"
                 addSupabaseHeaders(to: &profReq)
                 let (pData, pResp) = try await URLSession.shared.data(for: profReq)
                 let pCode = (pResp as? HTTPURLResponse)?.statusCode ?? -1
-                print("RESULTS(by gender/age) profiles HTTP:", pCode)
                 guard (200...299).contains(pCode) else {
-                    print("RESULTS(by gender/age) profiles RAW:", String(data: pData, encoding: .utf8) ?? "<binary>")
                     throw URLError(.badServerResponse)
                 }
                 let profiles = try JSONDecoder().decode([ProfileRow].self, from: pData)
@@ -560,7 +538,6 @@ enum PollAPI {
         ]
 
         let url = comps.url!
-        print("RESULTS URL:", url.absoluteString)
 
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
@@ -570,9 +547,7 @@ enum PollAPI {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        print("RESULTS HTTP status:", code)
         if !(200...299).contains(code) {
-            print("RESULTS RAW response:", String(data: data, encoding: .utf8) ?? "<binary>")
             throw URLError(.badServerResponse)
         }
 
@@ -588,9 +563,7 @@ enum PollAPI {
     struct ResultFilter: Encodable {
         var minAge: Int? = nil
         var maxAge: Int? = nil
-        var occupation: String? = nil      // 例: "student", "employee_fulltime" など
         var countryCode: String? = nil     // 例: "JP"
-        var prefectureCode: String? = nil  // 例: "13"（東京都）
     }
 
     /// フィルタ指定つきの結果取得（UI のための薄いラッパー）。
@@ -720,7 +693,6 @@ enum PollAPI {
         ]
         
         let url = comps.url!
-        print("POLLS URL:", url.absoluteString)
         
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
@@ -730,9 +702,7 @@ enum PollAPI {
         
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        print("POLLS HTTP status:", code)
         if !(200...299).contains(code) {
-            print("POLLS RAW response:", String(data: data, encoding: .utf8) ?? "<binary>")
             throw URLError(.badServerResponse)
         }
         
@@ -749,8 +719,6 @@ enum PollAPI {
         comps.queryItems = [
             URLQueryItem(name: "poll_id", value: "eq.\(pollID.uuidString.uppercased())"),
             URLQueryItem(name: "select", value: "*"),
-            // 並び順を idx で管理しているなら以下を有効化
-            // URLQueryItem(name: "order", value: "idx.asc"),
             URLQueryItem(name: "limit", value: "1000")
         ]
 
@@ -763,9 +731,7 @@ enum PollAPI {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        print("OPTIONS HTTP status:", code)
         if !(200...299).contains(code) {
-            print("OPTIONS RAW response:", String(data: data, encoding: .utf8) ?? "<binary>")
             throw URLError(.badServerResponse)
         }
         return try JSONDecoder().decode([PollOption].self, from: data)
@@ -795,17 +761,15 @@ enum PollAPI {
         let pollPayload: [String: Any] = [
             "question": question,
             "category": category,
-            // 開発中は固定ユーザーで作成（本番は Supabase Auth の JWT から付与）
-            "owner_id": AppConfig.devUserID.uuidString.uppercased(),
+            // 端末ごとの currentUserID を利用（本番は Supabase Auth の JWT から付与）
+            "owner_id": AppConfig.currentUserID.uuidString.uppercased(),
             // タイムラインで誰でも見えるように公開
             "is_public": true
         ]
         reqPoll.httpBody = try JSONSerialization.data(withJSONObject: pollPayload)
 
-        print("POST /polls", pollPayload)
         let (pData, pResp) = try await URLSession.shared.data(for: reqPoll)
         let pCode = (pResp as? HTTPURLResponse)?.statusCode ?? -1
-        print("POST polls HTTP:", pCode, "RAW:", String(data: pData, encoding: .utf8) ?? "<binary>")
         guard (200...299).contains(pCode) else { throw URLError(.badServerResponse) }
 
         // 返却は配列（行配列）なので decode
@@ -838,10 +802,8 @@ enum PollAPI {
             }
             reqOpts.httpBody = try JSONSerialization.data(withJSONObject: optRows)
 
-            print("POST /poll_options", optRows)
-            let (oData, oResp) = try await URLSession.shared.data(for: reqOpts)
+            let (_, oResp) = try await URLSession.shared.data(for: reqOpts)
             let oCode = (oResp as? HTTPURLResponse)?.statusCode ?? -1
-            print("POST options HTTP:", oCode, "RAW:", String(data: oData, encoding: .utf8) ?? "<binary>")
             guard (200...299).contains(oCode) else {
                 // 失敗時に polls 側を消すロールバックを試みる（任意）
                 Task { try? await deletePoll(pollID: pollID) }
@@ -868,8 +830,7 @@ enum PollAPI {
         req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
 
         let (_, resp) = try await URLSession.shared.data(for: req)
-        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        print("DELETE poll HTTP:", code)
+        _ = (resp as? HTTPURLResponse)?.statusCode ?? -1
     }
 
     // MARK: - Soft delete (set deleted_at)
@@ -895,13 +856,9 @@ enum PollAPI {
         let body: [String: Any] = ["deleted_at": iso.string(from: Date())]
         req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (_, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
         if !(200...299).contains(code) {
-            #if DEBUG
-            print("SOFT DELETE HTTP:", code)
-            print("SOFT DELETE RAW:", String(data: data, encoding: .utf8) ?? "<binary>")
-            #endif
             throw URLError(.badServerResponse)
         }
     }
@@ -916,7 +873,6 @@ enum PollAPI {
             URLQueryItem(name: "on_conflict", value: "poll_id,user_id")
         ]
         let url = comps.url!
-
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -927,23 +883,15 @@ enum PollAPI {
         req.setValue("resolution=merge-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
 
         let payload: [String: String] = [
-            "poll_id":   pollID.uuidString,
-            "user_id":   userID.uuidString,
-            "option_id": optionID.uuidString
+            "poll_id":   pollID.uuidString.uppercased(),
+            "user_id":   userID.uuidString.uppercased(),
+            "option_id": optionID.uuidString.uppercased()
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-        // Debug logs
-        print("VOTE URL:", url.absoluteString)
-        print("VOTE body:", payload)
-
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (_, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        print("VOTE HTTP status:", code)
-
         if !(200...299).contains(code) {
-            // 2xx 以外は内容を出して失敗
-            print("VOTE RAW response:", String(data: data, encoding: .utf8) ?? "<binary>")
             throw URLError(.badServerResponse)
         }
     }
@@ -978,11 +926,7 @@ enum PollAPI {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        print("POLLS HTTP status:", code, "URL:", url.absoluteString)
-        guard (200...299).contains(code) else {
-            print("POLLS RAW response:", String(data: data, encoding: .utf8) ?? "<binary>")
-            throw URLError(.badServerResponse)
-        }
+        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
 
         return try JSONDecoder().decode([Poll].self, from: data)
     }
@@ -1013,62 +957,46 @@ enum PollAPI {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        print("POLLS(POPULAR) HTTP status:", code, "URL:", url.absoluteString)
-        guard (200...299).contains(code) else {
-            print("POLLS(POPULAR) RAW:", String(data: data, encoding: .utf8) ?? "<binary>")
-            throw URLError(.badServerResponse)
-        }
+        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
         return try JSONDecoder().decode([Poll].self, from: data)
     }
 
     // MARK: - Reports
-    /// 通報を送信（Upsertで重複は成功扱い）
+    /// 通報を送信（Edge Function経由）
     static func submitReport(
         pollID: UUID,
         reporterUserID: UUID,
         reason: ReportReason,
         detail: String? = nil
     ) async throws {
-        // Build: /rest/v1/reports?on_conflict=poll_id,reporter_user_id
+        // Send to Supabase Edge Function (submit-report)
         guard let base = URL(string: AppConfig.supabaseURL) else { throw URLError(.badURL) }
-        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
-        comps.path = "/rest/v1/reports"
-        comps.queryItems = [
-            URLQueryItem(name: "on_conflict", value: "poll_id,reporter_user_id")
-        ]
-        let url = comps.url!
-
-        // PostgREST upsert payload (array of rows)
-        let body: [[String: Any]] = [[
-            "poll_id": pollID.uuidString.uppercased(),
-            "reporter_user_id": reporterUserID.uuidString.uppercased(),
-            "reason_code": reason.rawValue,
-            "reason_text": detail ?? NSNull()
-        ]]
+        let url = base.appendingPathComponent("/functions/v1/submit-report")
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        // Required headers for Functions gateway and our shared secret
+        req.setValue(AppConfig.reportToken, forHTTPHeaderField: "X-Report-Token")
         req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
-        // 重複（既に同じ user が同じ poll を通報）でも 2xx で返す
-        req.setValue("resolution=ignore-duplicates", forHTTPHeaderField: "Prefer")
+        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+
+        // Function expects a single JSON object, not an array
+        let body: [String: Any] = [
+            "poll_id": pollID.uuidString.uppercased(),
+            "reporter_user_id": reporterUserID.uuidString.uppercased(),
+            "reason_code": reason.rawValue,
+            "reason_text": detail ?? NSNull()
+        ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (_, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
 
         switch code {
-        case 200, 201, 204:
+        case 200, 201:
             return
         default:
-            #if DEBUG
-            print("REPORT HTTP:", code)
-            if let s = String(data: data, encoding: .utf8) {
-                print("REPORT RAW:", s)
-            }
-            #endif
             throw URLError(.badServerResponse)
         }
     }
@@ -1084,7 +1012,6 @@ enum PollAPI {
             URLQueryItem(name: "on_conflict", value: "poll_id,user_id")
         ]
         let url = comps.url!
-        print("LIKE URL:", url.absoluteString)
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -1099,15 +1026,11 @@ enum PollAPI {
             "poll_id": pollID.uuidString.uppercased(),
             "user_id": userID.uuidString.uppercased()
         ]
-        print("LIKE BODY:", payload)
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (_, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        print("LIKE HTTP:", code)
         if !(200...299).contains(code) {
-            let dataStr = String(data: data, encoding: .utf8) ?? "<binary>"
-            print("LIKE RAW:", dataStr)
             throw URLError(.badServerResponse)
         }
     }
@@ -1122,19 +1045,15 @@ enum PollAPI {
             URLQueryItem(name: "user_id", value: "eq.\(userID.uuidString.uppercased())")
         ]
         let url = comps.url!
-        print("UNLIKE URL:", url.absoluteString)
 
         var req = URLRequest(url: url)
         req.httpMethod = "DELETE"
         req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
         req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (_, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        print("UNLIKE HTTP:", code)
         if !(200...299).contains(code) {
-            let dataStr = String(data: data, encoding: .utf8) ?? "<binary>"
-            print("UNLIKE RAW:", dataStr)
             throw URLError(.badServerResponse)
         }
     }
@@ -1156,7 +1075,6 @@ enum PollAPI {
         ]
 
         let url = comps.url!
-        print("LIKE COUNTS URL:", url.absoluteString)
 
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
@@ -1166,11 +1084,7 @@ enum PollAPI {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        print("LIKE COUNTS HTTP:", code)
-        guard (200...299).contains(code) else {
-            print("LIKE COUNTS RAW:", String(data: data, encoding: .utf8) ?? "<binary>")
-            throw URLError(.badServerResponse)
-        }
+        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
 
         // サーバーからは { poll_id } の配列だけを受け取り、端末でカウント
         struct Row: Decodable { let poll_id: UUID }
@@ -1197,7 +1111,6 @@ enum PollAPI {
         ]
 
         let url = comps.url!
-        print("USER LIKED URL:", url.absoluteString)
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -1206,7 +1119,6 @@ enum PollAPI {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        print("USER LIKED HTTP:", code)
         guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
 
         struct Row: Decodable { let poll_id: UUID }

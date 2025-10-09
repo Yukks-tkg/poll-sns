@@ -1,4 +1,3 @@
-
 import SwiftUI
 
 extension Notification.Name {
@@ -96,15 +95,13 @@ struct PollDetailView: View {
     @State private var deleting = false
     @State private var deleteError: String?
 
-    // Temporary user id (later replace with Supabase Auth user id)
-    private let dummyUserID = UUID(uuidString: "47f61351-7f40-4899-8710-23173bd9c943")!
 
     // Lock state (disable interactions when voted / submitting / loading)
     private var isLocked: Bool { voted || isSubmitting || loading }
 
     // 作成者テキスト（Auth導入前は devUserID と一致したら「あなた」）
     private var ownerText: String {
-        if let owner = poll.owner_id, owner == AppConfig.devUserID {
+        if let owner = poll.owner_id, owner == AppConfig.currentUserID {
             return "作成者: あなた"
         } else if poll.owner_id != nil {
             return "作成者: 匿名"
@@ -583,8 +580,6 @@ struct PollDetailView: View {
 
 
                 HStack(spacing: 12) {
-                    // （ヘッダーに移動済みのためカテゴリのみ軽く再掲 or 必要なら削除）
-                    // 表示が重複するならこのHStack自体を削除してもOK
                 }
 
                 optionsSection
@@ -607,7 +602,7 @@ struct PollDetailView: View {
                     } label: {
                         Label("通報する", systemImage: "exclamationmark.bubble")
                     }
-                    if let owner = poll.owner_id, owner == AppConfig.devUserID {
+                    if let owner = poll.owner_id, owner == AppConfig.currentUserID {
                         Button(role: .destructive) {
                             showDeleteConfirm = true
                         } label: {
@@ -622,7 +617,7 @@ struct PollDetailView: View {
         .sheet(isPresented: $showReport) {
             ReportSheet(
                 pollID: poll.id,
-                reporterUserID: dummyUserID,
+                reporterUserID: AppConfig.currentUserID,
                 onDone: {
                     showReportThanks = true
                 }
@@ -675,7 +670,7 @@ struct PollDetailView: View {
             }
 
             do {
-                let map = try await PollAPI.fetchUserVoteDetailMap(pollIDs: [poll.id], userID: dummyUserID)
+                let map = try await PollAPI.fetchUserVoteDetailMap(pollIDs: [poll.id], userID: AppConfig.currentUserID)
                 if let detail = map[poll.id] {
                     await MainActor.run {
                         self.voted = true
@@ -759,7 +754,7 @@ struct PollDetailView: View {
         isSubmitting = true
         defer { isSubmitting = false }
         do {
-            try await PollAPI.submitVote(pollID: poll.id, optionID: optionID, userID: dummyUserID)
+            try await PollAPI.submitVote(pollID: poll.id, optionID: optionID, userID: AppConfig.currentUserID)
             voted = true
             if let chosen = options.first(where: { $0.id == optionID }) {
                 myChoiceLabel = chosen.displayText
@@ -774,7 +769,7 @@ struct PollDetailView: View {
                 userInfo: [
                     AppNotificationKey.pollID: poll.id,
                     AppNotificationKey.optionID: optionID,
-                    AppNotificationKey.userID: dummyUserID
+                    AppNotificationKey.userID: AppConfig.currentUserID
                 ]
             )
         } catch {
@@ -793,8 +788,6 @@ struct PollDetailView: View {
 
     @MainActor private func loadAgeBreakdown() async {
         do {
-            // 年代色分けは「全バケットの可視化」という意味合いなので、
-            // 年齢フィルタは適用せず、必要に応じて性別フィルタだけ反映
             let list = try await PollAPI.fetchAgeBreakdown(for: poll.id, gender: genderFilter.apiValue)
             ageBreakdown = Dictionary(uniqueKeysWithValues: list.map { ($0.option_id, $0) })
         } catch {

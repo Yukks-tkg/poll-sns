@@ -1,7 +1,5 @@
-// Sources/Models/PollOption.swift
 import Foundation
 
-/// 投票の選択肢
 struct PollOption: Identifiable, Decodable, Hashable {
     let id: UUID
     let poll_id: UUID

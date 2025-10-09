@@ -11,8 +11,7 @@ struct SettingsSheet: View {
             List {
                 Section {
                     NavigationLink("プロフィールを編集") {
-                        ProfileEditView(userID: AppConfig.devUserID, initialProfile: initialProfile) {
-                            // 保存完了時のコールバック
+                        ProfileEditView(userID: AppConfig.currentUserID, initialProfile: initialProfile) {
                             onProfileEdited?()
                             (onClose ?? { dismiss() })()
                         }
@@ -32,11 +31,6 @@ struct SettingsSheet: View {
                         Label("プライバシーポリシー", systemImage: "hand.raised")
                     }
                 }
-
-                // 将来の設定項目を追加する場合は以下のセクションを有効化
-                // Section("設定") {
-                //     Toggle("通知を受け取る", isOn: .constant(true))
-                // }
             }
             .navigationTitle("設定")
             .navigationBarTitleDisplayMode(.inline)
@@ -50,7 +44,6 @@ struct SettingsSheet: View {
     }
 }
 
-// プレビュー（任意）
 #Preview {
     SettingsSheet()
 }

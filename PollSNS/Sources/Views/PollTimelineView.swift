@@ -5,12 +5,12 @@ struct PollTimelineView: View {
     @State private var polls: [Poll] = []
     @State private var errorMessage: String?
     @State private var selectedCategory: String = "all"
-    @State private var sortOrder: String = "latest" // "latest" or "popular"
-    @State private var likeCounts: [UUID: Int] = [:]   // pollID -> いいね数
-    @State private var likedSet: Set<UUID> = []        // 自分がいいね済みの pollID
-    @State private var likingNow: Set<UUID> = []       // 二重タップ防止
-    @State private var votedSet: Set<UUID> = []          // 自分が投票済みの pollID
-    @State private var myChoiceMap: [UUID: String] = [:] // pollID -> 自分の選択ラベル
+    @State private var sortOrder: String = "latest"
+    @State private var likeCounts: [UUID: Int] = [:]
+    @State private var likedSet: Set<UUID> = []
+    @State private var likingNow: Set<UUID> = []
+    @State private var votedSet: Set<UUID> = []
+    @State private var myChoiceMap: [UUID: String] = [:]
     @State private var showingNewPoll = false
     private let dummyUserID = UUID(uuidString: "47F61351-7F40-4899-8710-23173BD9C943")!
 
@@ -71,15 +71,12 @@ struct PollTimelineView: View {
                         PollDetailView(poll: poll)
                     } label: {
                         HStack(alignment: .center, spacing: 12) {
-                            // 左側：PollRow の下に「ジャンル・時刻」を追加
                             VStack(alignment: .leading, spacing: 4) {
-                                // 既存のタイトル・あなたの選択など
                                 PollRow(
                                     poll: poll,
                                     isVoted: votedSet.contains(poll.id),
                                     myChoiceLabel: myChoiceMap[poll.id]
                                 )
-                                // 追加: ジャンル & 作成時刻
                                 HStack(spacing: 8) {
                                     Text(displayCategory(poll.category))
                                         .font(.caption2)
@@ -95,7 +92,6 @@ struct PollTimelineView: View {
                                 }
                             }
 
-                            // 右側：いいねボタン（既存）
                             let count = likeCounts[poll.id] ?? 0
                             let isLiked = likedSet.contains(poll.id)
                             Button {
@@ -136,7 +132,6 @@ struct PollTimelineView: View {
                 Task { await reloadTimeline() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .pollDidDelete).receive(on: RunLoop.main)) { note in
-                // IDは UUID or String どちらでも受け取れるようにする
                 let extractedID: UUID? = {
                     if let any = note.userInfo?["pollID"] {
                         if let u = any as? UUID { return u }
@@ -149,7 +144,6 @@ struct PollTimelineView: View {
                     withAnimation {
                         polls.removeAll { $0.id == id }
                     }
-                    // 任意：サーバー状態とも同期
                     await reloadTimeline()
                 }
             }
@@ -201,17 +195,14 @@ struct PollTimelineView: View {
                                                      order: "created_at.desc",
                                                      category: categoryParam)
             }
-            // いいね情報の取得（件数と自分の状態）
             let ids = polls.map(\.id)
             likeCounts = try await PollAPI.fetchLikeCounts(pollIDs: ids)
             likedSet   = try await PollAPI.fetchUserLiked(pollIDs: ids, userID: dummyUserID)
-            // 投票済み情報（バッジと “あなたの選択” 表示用）
             do {
                 let detail = try await PollAPI.fetchUserVoteDetailMap(pollIDs: ids, userID: dummyUserID)
                 self.votedSet = Set(detail.keys)
                 self.myChoiceMap = detail.reduce(into: [:]) { $0[$1.key] = $1.value.1 }
             } catch {
-                // 取得失敗時は空のまま（UIは非表示になるだけ）
                 self.votedSet = []
                 self.myChoiceMap = [:]
             }
@@ -222,11 +213,9 @@ struct PollTimelineView: View {
     }
 
     private func toggleLike(for pollID: UUID, isLiked: Bool, current: Int) async {
-        // 二重送信防止
         if likingNow.contains(pollID) { return }
         likingNow.insert(pollID)
 
-        // 楽観的更新
         if isLiked {
             likedSet.remove(pollID)
             likeCounts[pollID] = max(0, current - 1)
@@ -242,7 +231,6 @@ struct PollTimelineView: View {
                 try await PollAPI.like(pollID: pollID, userID: dummyUserID)
             }
         } catch {
-            // 失敗したらロールバック
             if isLiked {
                 likedSet.insert(pollID)
                 likeCounts[pollID] = current

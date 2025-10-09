@@ -8,19 +8,15 @@ extension Notification.Name {
 struct NewPollView: View {
     @Environment(\.dismiss) private var dismiss
 
-    // 親に作成完了を知らせる
     var onCreated: (UUID) -> Void = { _ in }
 
-    // 入力
     @State private var question: String = ""
     @State private var category: String = "food"
     @State private var options: [String] = ["", ""] // 2つ
 
-    // 状態
     @State private var isSubmitting = false
     @State private var errorMessage: String?
 
-    // カテゴリ選択（タイムラインと同じキーを使う）
     private let categories: [(key: String, label: String)] = [
         ("all","すべて"), ("food","🍔 ごはん"), ("fashion","👗 ファッション"),
         ("health","🏃‍♀️ 健康"), ("hobby","🎮 趣味"), ("travel","✈️ 旅行"),

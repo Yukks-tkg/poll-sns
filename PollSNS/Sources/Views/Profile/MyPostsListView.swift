@@ -1,10 +1,3 @@
-//
-//  MyPostsListView.swift
-//  PollSNS
-//
-//  Created by 高木祐輼 on 2025/09/26.
-//
-
 import SwiftUI
 import Combine
 
@@ -101,16 +94,16 @@ struct MyPostsListView: View {
     }
 
     private func load() async {
-        // 二重起動を避ける（.task と .refreshable が同時に動くケース対策）
+
         if loading { return }
         loading = true
         defer { loading = false }
         do {
-            // 自分の投稿を取得（ソフト削除済みはAPI側で除外済み）
+
             polls = try await PollAPI.fetchMyPolls(ownerID: ownerID)
             error = nil
         } catch is CancellationError {
-            // Pull to Refresh などでキャンセルされた場合は“正常”として無視
+
             return
         } catch let urlErr as URLError where urlErr.code == .cancelled {
             return
@@ -122,7 +115,6 @@ struct MyPostsListView: View {
     }
 }
 
-// プレビュー（任意）
 #Preview {
-    MyPostsListView(ownerID: AppConfig.devUserID)
+    MyPostsListView(ownerID: AppConfig.currentUserID)
 }
