@@ -334,14 +334,23 @@ struct PollDetailView: View {
 
     @ViewBuilder
     private var resultsPlaceholder: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("結果")
-                .font(.headline)
+        ZStack(alignment: .topLeading) {
+            // 中央寄せにするヒント文（左寄せ）
             Text("投票すると結果が見えます")
-                .font(.caption)
+                .font(.body)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .padding(.top, 12)
+
+            // タイトルは左上
+            Text("結果")
+                .font(.title3).bold()
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding()
+        .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
@@ -478,7 +487,7 @@ struct PollDetailView: View {
         // 結果表示
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 8) {
-                Text("結果").font(.headline)
+                Text("結果").font(.title3).bold()
                 Spacer()
                 Button {
                     colorizeByGender.toggle()

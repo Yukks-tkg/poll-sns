@@ -111,9 +111,7 @@ enum PollAPI {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let body = filters.toRPCBody(pollID: pollID)
         req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
@@ -149,9 +147,7 @@ enum PollAPI {
 
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -183,9 +179,7 @@ enum PollAPI {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
         req.setValue("resolution=merge-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
         let body: [String: Any] = ["id": userID.uuidString.uppercased()]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -229,9 +223,7 @@ enum PollAPI {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
         // 重複時はマージし、反映後の行を返す
         req.setValue("resolution=merge-duplicates,return=representation", forHTTPHeaderField: "Prefer")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -267,81 +259,29 @@ enum PollAPI {
     /// 各選択肢ごとの性別内訳（male/female/other）を取得します。
     /// 年齢フィルタ（ageMin/ageMax）が指定された場合は、該当年齢の投票のみを集計します。
     static func fetchGenderBreakdown(for pollID: UUID, ageMin: Int? = nil, ageMax: Int? = nil) async throws -> [GenderBreakdown] {
-        // Step 1: votes から option_id と user_id を取得
-        struct VoteUIDRow: Decodable { let option_id: UUID; let user_id: UUID }
+        // RPC: fetch_gender_breakdown(_poll_id uuid)
         guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
-        comps.path = "/rest/v1/votes"
-        comps.queryItems = [
-            URLQueryItem(name: "poll_id", value: "eq.\(pollID.uuidString.uppercased())"),
-            URLQueryItem(name: "select", value: "option_id,user_id"),
-            URLQueryItem(name: "limit", value: "10000")
-        ]
-        let votesURL = comps.url!
-        var votesReq = URLRequest(url: votesURL)
-        votesReq.httpMethod = "GET"
-        addSupabaseHeaders(to: &votesReq)
-        let (vData, vResp) = try await URLSession.shared.data(for: votesReq)
-        guard (vResp as? HTTPURLResponse).map({ (200...299).contains($0.statusCode) }) == true else {
-            throw URLError(.badServerResponse)
+        comps.path = "/rest/v1/rpc/fetch_gender_breakdown"
+        let url = comps.url!
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        addSupabaseHeaders(to: &req)
+
+        let body: [String: Any] = ["_poll_id": pollID.uuidString]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
+
+        struct Row: Decodable { let option_id: UUID; let male: Int; let female: Int; let other: Int }
+        let rows = try JSONDecoder().decode([Row].self, from: data)
+        return rows.map { r in
+            GenderBreakdown(option_id: r.option_id, male: r.male, female: r.female, other: r.other)
         }
-        let votes = try JSONDecoder().decode([VoteUIDRow].self, from: vData)
-        if votes.isEmpty { return [] }
-
-        // Step 2: profiles から対象 user_id の gender/age を取得（URL長対策で分割）
-        let userIDs = Array(Set(votes.map(\.user_id)))
-        struct ProfileRow: Decodable { let user_id: UUID; let gender: String?; let age: Int? }
-        var genderMap: [UUID: String] = [:]
-        var ageMap: [UUID: Int] = [:]
-
-        let chunkSize = 200
-        for start in stride(from: 0, to: userIDs.count, by: chunkSize) {
-            let end = min(start + chunkSize, userIDs.count)
-            let chunk = userIDs[start..<end]
-            let inList = chunk.map { $0.uuidString.uppercased() }.joined(separator: ",")
-            var pComps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
-            pComps.path = "/rest/v1/profiles"
-            pComps.queryItems = [
-                URLQueryItem(name: "user_id", value: "in.(\(inList))"),
-                URLQueryItem(name: "select", value: "user_id,gender,age"),
-                URLQueryItem(name: "limit", value: "\(chunk.count)")
-            ]
-            let profURL = pComps.url!
-            var profReq = URLRequest(url: profURL)
-            profReq.httpMethod = "GET"
-            addSupabaseHeaders(to: &profReq)
-            let (pData, pResp) = try await URLSession.shared.data(for: profReq)
-            guard (pResp as? HTTPURLResponse).map({ (200...299).contains($0.statusCode) }) == true else {
-                throw URLError(.badServerResponse)
-            }
-            let profiles = try JSONDecoder().decode([ProfileRow].self, from: pData)
-            for prof in profiles {
-                if let g = prof.gender { genderMap[prof.user_id] = g }
-                if let a = prof.age { ageMap[prof.user_id] = a }
-            }
-        }
-
-        // Step 3: option × gender で集計（必要なら年齢条件を適用）
-        var dict: [UUID: GenderBreakdown] = [:]
-        for v in votes {
-            // 年齢条件（片方だけの指定も考慮）
-            if let minA = ageMin {
-                guard let a = ageMap[v.user_id], a >= minA else { continue }
-            }
-            if let maxA = ageMax {
-                guard let a = ageMap[v.user_id], a <= maxA else { continue }
-            }
-
-            var gb = dict[v.option_id] ?? GenderBreakdown(option_id: v.option_id, male: 0, female: 0, other: 0)
-            switch genderMap[v.user_id] {
-            case "male":   gb.male += 1
-            case "female": gb.female += 1
-            case "other":  gb.other += 1
-            default:       break // 性別未設定ユーザーは集計から除外（必要なら other 扱いに変更）
-            }
-            dict[v.option_id] = gb
-        }
-        return Array(dict.values)
     }
 
     // Age breakdown per option (10代/20代/30代/40代/50代以上)
@@ -360,91 +300,41 @@ enum PollAPI {
     /// gender を指定した場合は、該当性別のみを集計します（nil なら全体）。
     /// 既存コードへ影響しないように新規 API として追加。
     static func fetchAgeBreakdown(for pollID: UUID, gender: String? = nil) async throws -> [AgeBreakdown] {
-        // Step 1: votes から option_id と user_id を取得
-        struct VoteUIDRow: Decodable { let option_id: UUID; let user_id: UUID }
+        // RPC: fetch_age_breakdown(_poll_id uuid)
         guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
-        comps.path = "/rest/v1/votes"
-        comps.queryItems = [
-            URLQueryItem(name: "poll_id", value: "eq.\(pollID.uuidString.uppercased())"),
-            URLQueryItem(name: "select", value: "option_id,user_id"),
-            URLQueryItem(name: "limit", value: "10000")
-        ]
-        let votesURL = comps.url!
-        var votesReq = URLRequest(url: votesURL)
-        votesReq.httpMethod = "GET"
-        addSupabaseHeaders(to: &votesReq)
-        let (vData, vResp) = try await URLSession.shared.data(for: votesReq)
-        guard (vResp as? HTTPURLResponse).map({ (200...299).contains($0.statusCode) }) == true else {
-            throw URLError(.badServerResponse)
-        }
-        let votes = try JSONDecoder().decode([VoteUIDRow].self, from: vData)
-        if votes.isEmpty { return [] }
+        comps.path = "/rest/v1/rpc/fetch_age_breakdown"
+        let url = comps.url!
 
-        // Step 2: profiles から対象 user_id の age/gender を取得（URL長対策で分割）
-        let userIDs = Array(Set(votes.map(\.user_id)))
-        struct ProfileRow: Decodable { let user_id: UUID; let age: Int?; let gender: String? }
-        var ageMap: [UUID: Int] = [:]
-        var genderMap: [UUID: String] = [:]
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        addSupabaseHeaders(to: &req)
 
-        let chunkSize = 200
-        for start in stride(from: 0, to: userIDs.count, by: chunkSize) {
-            let end = min(start + chunkSize, userIDs.count)
-            let chunk = userIDs[start..<end]
-            let inList = chunk.map { $0.uuidString.uppercased() }.joined(separator: ",")
-            var pComps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
-            pComps.path = "/rest/v1/profiles"
-            pComps.queryItems = [
-                URLQueryItem(name: "user_id", value: "in.(\(inList))"),
-                URLQueryItem(name: "select", value: "user_id,age,gender"),
-                URLQueryItem(name: "limit", value: "\(chunk.count)")
-            ]
-            let profURL = pComps.url!
-            var profReq = URLRequest(url: profURL)
-            profReq.httpMethod = "GET"
-            addSupabaseHeaders(to: &profReq)
-            let (pData, pResp) = try await URLSession.shared.data(for: profReq)
-            guard (pResp as? HTTPURLResponse).map({ (200...299).contains($0.statusCode) }) == true else {
-                throw URLError(.badServerResponse)
-            }
-            let profiles = try JSONDecoder().decode([ProfileRow].self, from: pData)
-            for prof in profiles {
-                if let a = prof.age { ageMap[prof.user_id] = a }
-                if let g = prof.gender { genderMap[prof.user_id] = g }
-            }
-        }
+        let body: [String: Any] = ["_poll_id": pollID.uuidString]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
 
-        // Step 3: option × 年代バケットで集計（必要なら gender 条件を適用）
-        func bucket(for age: Int) -> Int? {
-            switch age {
-            case 10...19: return 10
-            case 20...29: return 20
-            case 30...39: return 30
-            case 40...49: return 40
-            case 50... :  return 50
-            default: return nil
-            }
-        }
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
 
-        var dict: [UUID: AgeBreakdown] = [:]
-        for v in votes {
-            if let needGender = gender {
-                // 性別条件：未設定は除外
-                guard let g = genderMap[v.user_id], g == needGender else { continue }
-            }
-            guard let age = ageMap[v.user_id], let b = bucket(for: age) else { continue }
-            var ab = dict[v.option_id] ?? AgeBreakdown(option_id: v.option_id, teens: 0, twenties: 0, thirties: 0, forties: 0, fiftiesPlus: 0)
-            switch b {
-            case 10: ab.teens += 1
-            case 20: ab.twenties += 1
-            case 30: ab.thirties += 1
-            case 40: ab.forties += 1
-            case 50: ab.fiftiesPlus += 1
-            default: break
-            }
-            dict[v.option_id] = ab
+        struct Row: Decodable {
+            let option_id: UUID
+            let teens: Int
+            let twenties: Int
+            let thirties: Int
+            let forties: Int
+            let fiftiesplus: Int // 注意: Postgresは小文字
         }
-        return Array(dict.values)
+        let rows = try JSONDecoder().decode([Row].self, from: data)
+        return rows.map { r in
+            AgeBreakdown(option_id: r.option_id,
+                         teens: r.teens,
+                         twenties: r.twenties,
+                         thirties: r.thirties,
+                         forties: r.forties,
+                         fiftiesPlus: r.fiftiesplus)
+        }
     }
     static func fetchResults(for pollID: UUID, gender: String? = nil, ageMin: Int? = nil, ageMax: Int? = nil) async throws -> [VoteResult] {
         // If gender or age is specified, join profiles to read gender/age and aggregate client-side
@@ -541,9 +431,7 @@ enum PollAPI {
 
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -591,9 +479,7 @@ enum PollAPI {
         let url = comps.url!
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -630,9 +516,7 @@ enum PollAPI {
 
         var req = URLRequest(url: comps.url!)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         struct Row: Decodable { let poll_id: UUID }
         let (data, resp) = try await URLSession.shared.data(for: req)
@@ -661,9 +545,7 @@ enum PollAPI {
 
         var req = URLRequest(url: comps.url!)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         struct Row: Decodable {
             let poll_id: UUID
@@ -696,9 +578,7 @@ enum PollAPI {
         
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
         
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -725,9 +605,7 @@ enum PollAPI {
         let url = comps.url!
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -752,9 +630,7 @@ enum PollAPI {
         var reqPoll = URLRequest(url: urlPoll)
         reqPoll.httpMethod = "POST"
         reqPoll.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        reqPoll.setValue("application/json", forHTTPHeaderField: "Accept")
-        reqPoll.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        reqPoll.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &reqPoll)
         // 作成後の行を返してもらう
         reqPoll.setValue("return=representation", forHTTPHeaderField: "Prefer")
 
@@ -786,9 +662,7 @@ enum PollAPI {
             var reqOpts = URLRequest(url: urlOpts)
             reqOpts.httpMethod = "POST"
             reqOpts.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            reqOpts.setValue("application/json", forHTTPHeaderField: "Accept")
-            reqOpts.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-            reqOpts.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+            addSupabaseHeaders(to: &reqOpts)
             // 作成後のレスポンスは不要
             reqOpts.setValue("return=minimal", forHTTPHeaderField: "Prefer")
 
@@ -826,8 +700,7 @@ enum PollAPI {
 
         var req = URLRequest(url: url)
         req.httpMethod = "DELETE"
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (_, resp) = try await URLSession.shared.data(for: req)
         _ = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -847,9 +720,7 @@ enum PollAPI {
         var req = URLRequest(url: url)
         req.httpMethod = "PATCH"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         // クライアント時刻で十分。サーバー時刻にしたい場合は RPC を用意して now() を使う。
         let iso = ISO8601DateFormatter()
@@ -876,9 +747,7 @@ enum PollAPI {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req) // 共通ヘッダー適用
         // ★ 重複時はマージ扱い（409を返さず 2xx にする）＋最小レスポンス
         req.setValue("resolution=merge-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
 
@@ -920,9 +789,7 @@ enum PollAPI {
         let url = comps.url!
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -951,9 +818,7 @@ enum PollAPI {
         let url = comps.url!
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -978,8 +843,7 @@ enum PollAPI {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         // Required headers for Functions gateway and our shared secret
         req.setValue(AppConfig.reportToken, forHTTPHeaderField: "X-Report-Token")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        addSupabaseHeaders(to: &req)
 
         // Function expects a single JSON object, not an array
         let body: [String: Any] = [
@@ -1016,9 +880,7 @@ enum PollAPI {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
         // 重複時も 2xx にする + レスポンス最小化
         req.setValue("resolution=merge-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
 
@@ -1048,8 +910,7 @@ enum PollAPI {
 
         var req = URLRequest(url: url)
         req.httpMethod = "DELETE"
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (_, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -1078,9 +939,7 @@ enum PollAPI {
 
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -1113,9 +972,7 @@ enum PollAPI {
         let url = comps.url!
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -1140,9 +997,7 @@ enum PollAPI {
 
         var req = URLRequest(url: comps.url!)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
@@ -1176,9 +1031,7 @@ enum PollAPI {
 
         var req = URLRequest(url: comps.url!)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
@@ -1210,9 +1063,7 @@ enum PollAPI {
         let url = comps.url!
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -1244,9 +1095,7 @@ enum PollAPI {
 
         var reqIDs = URLRequest(url: compsIDs.url!)
         reqIDs.httpMethod = "GET"
-        reqIDs.setValue("application/json", forHTTPHeaderField: "Accept")
-        reqIDs.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        reqIDs.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &reqIDs)
 
         let (idData, idResp) = try await URLSession.shared.data(for: reqIDs)
         let idCode = (idResp as? HTTPURLResponse)?.statusCode ?? -1
@@ -1272,9 +1121,7 @@ enum PollAPI {
         let url = comps.url!
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        addSupabaseHeaders(to: &req)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -1282,3 +1129,4 @@ enum PollAPI {
         return try JSONDecoder().decode([Poll].self, from: data)
     }
 }
+
