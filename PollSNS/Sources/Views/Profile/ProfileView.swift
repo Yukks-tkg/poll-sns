@@ -12,7 +12,6 @@ struct ProfileView: View {
     var body: some View {
         VStack(spacing: 0) {
             profileCard
-                .frame(height: 200)
 
             Picker("", selection: $selectedSegment) {
                 Text("自分の投稿").tag(0)

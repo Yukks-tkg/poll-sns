@@ -47,15 +47,18 @@ struct MyVotesListView: View {
                 }
             } else if polls.isEmpty {
                 Section {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 12) {
                         Text("まだ投票したアンケートはありません")
+                            .font(.headline)
                             .foregroundStyle(.secondary)
                         Text("気になる投稿から投票してみましょう")
-                            .font(.caption)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity, minHeight: 220)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 32)
                 }
             } else {
                 Section {

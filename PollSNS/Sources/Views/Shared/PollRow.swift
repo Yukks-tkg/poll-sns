@@ -14,13 +14,9 @@ struct PollRow: View {
                     .lineLimit(2)
                     .foregroundStyle(.primary)
 
-                // 自分の選択が分かっていれば優先表示。無ければカテゴリを表示
+                // 自分の選択が分かっていれば表示。未投票時は何も表示しない
                 if let label = myChoiceLabel, !label.isEmpty {
                     Text("あなたの選択：\(label)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(poll.category)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

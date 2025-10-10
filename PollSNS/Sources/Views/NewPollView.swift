@@ -31,19 +31,20 @@ struct NewPollView: View {
     private var isValid: Bool {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
         let opts = validOptions
-        // ❶ 質問は5文字以上120文字以内、❷ 選択肢は2つ以上かつ重複なし
-        return q.count >= 5 && q.count <= 120 && Set(opts).count >= 2
+        // ❶ 質問は5文字以上80文字以内、❷ 選択肢は2つ以上かつ重複なし
+        return q.count >= 5 && q.count <= 80 && Set(opts).count >= 2
     }
 
     var body: some View {
         Form {
             Section("質問") {
-                TextField("例: 今夜の晩ごはんは？", text: $question)
+                TextField("例: 今夜の晩ごはんは？", text: $question, axis: .vertical)
+                    .lineLimit(2...5)
                     .textInputAutocapitalization(.never)
                 HStack {
                     Spacer()
-                    Text("\(question.count) / 120")
-                        .foregroundColor(question.count > 120 ? .red : .secondary)
+                    Text("\(question.count) / 80")
+                        .foregroundColor(question.count > 80 ? .red : .secondary)
                         .font(.footnote)
                 }
             }
@@ -55,9 +56,9 @@ struct NewPollView: View {
                         .foregroundColor(.red)
                         .font(.footnote)
                 }
-            } else if _trimmedQ.count > 120 {
+            } else if _trimmedQ.count > 80 {
                 Section {
-                    Text("120文字以内で入力してください")
+                    Text("80文字以内で入力してください")
                         .foregroundColor(.red)
                         .font(.footnote)
                 }
@@ -76,6 +77,27 @@ struct NewPollView: View {
                         Text("\(i+1).")
                         TextField("選択肢", text: $options[i])
                             .textInputAutocapitalization(.never)
+                        Spacer(minLength: 8)
+                        if options.count > 2 {
+                            Button(role: .destructive) {
+                                options.remove(at: i)
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundColor(.red)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("この行を削除")
+                        }
+                    }
+                    // 右スワイプで削除（Form内でも有効）
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        if options.count > 2 {
+                            Button(role: .destructive) {
+                                options.remove(at: i)
+                            } label: {
+                                Label("削除", systemImage: "trash")
+                            }
+                        }
                     }
                 }
                 Button {
@@ -111,7 +133,7 @@ struct NewPollView: View {
 
     private func submit() async {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard q.count >= 5 && q.count <= 120 && isValid else { return }
+        guard q.count >= 5 && q.count <= 80 && isValid else { return }
         isSubmitting = true; errorMessage = nil
         do {
             let id = try await PollAPI.createPoll(

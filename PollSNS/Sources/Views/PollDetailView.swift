@@ -88,6 +88,7 @@ struct PollDetailView: View {
 
     // Owner avatar emoji (loaded from profiles)
     @State private var ownerEmoji: String?
+    @State private var ownerName: String?
 
     // Delete state
     @Environment(\.dismiss) private var dismiss
@@ -103,6 +104,8 @@ struct PollDetailView: View {
     private var ownerText: String {
         if let owner = poll.owner_id, owner == AppConfig.currentUserID {
             return "作成者: あなた"
+        } else if let name = ownerName, !name.isEmpty {
+            return "作成者: \(name)"
         } else if poll.owner_id != nil {
             return "作成者: 匿名"
         } else {
@@ -283,25 +286,46 @@ struct PollDetailView: View {
                 }
                 .frame(height: 8)
 
-                // 凡例（横スクロールで折り返し防止）
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        Label("10代 \(teens)", systemImage: "square.fill")
-                            .foregroundStyle(c10).font(.caption2)
-                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                        Label("20代 \(twenties)", systemImage: "square.fill")
-                            .foregroundStyle(c20).font(.caption2)
-                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                        Label("30代 \(thirties)", systemImage: "square.fill")
-                            .foregroundStyle(c30).font(.caption2)
-                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                        Label("40代 \(forties)", systemImage: "square.fill")
-                            .foregroundStyle(c40).font(.caption2)
-                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                        Label("50代以上 \(fiftiesPlus)", systemImage: "square.fill")
-                            .foregroundStyle(c50).font(.caption2)
-                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                // 凡例（横スクロールしやすさの視覚ヒント：右端フェード＋矢印）
+                ZStack {
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        HStack(spacing: 12) {
+                            Label("10代 \(teens)", systemImage: "square.fill")
+                                .foregroundStyle(c10).font(.caption2)
+                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                            Label("20代 \(twenties)", systemImage: "square.fill")
+                                .foregroundStyle(c20).font(.caption2)
+                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                            Label("30代 \(thirties)", systemImage: "square.fill")
+                                .foregroundStyle(c30).font(.caption2)
+                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                            Label("40代 \(forties)", systemImage: "square.fill")
+                                .foregroundStyle(c40).font(.caption2)
+                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                            Label("50代以上 \(fiftiesPlus)", systemImage: "square.fill")
+                                .foregroundStyle(c50).font(.caption2)
+                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                        }
+                        .padding(.trailing, 24) // 右端の矢印と被らない余白
+                        .padding(.bottom, 6)
                     }
+
+                    // 右端フェード（背景色と馴染ませる）
+                    LinearGradient(
+                        colors: [Color.clear, Color(.systemBackground)],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                    .frame(width: 40)
+                    .allowsHitTesting(false)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+
+                    // 右向き矢印
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.trailing, 8)
+                        .allowsHitTesting(false)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .padding(.top, 2)
             }
@@ -659,13 +683,20 @@ struct PollDetailView: View {
         .task {
             await loadOptions()
 
-            // 投稿者の絵文字を取得（あれば表示に反映）
+            // 投稿者プロフィールを取得（絵文字と名前）
             if let owner = poll.owner_id {
                 do {
-                    let emoji = try await PollAPI.fetchOwnerEmoji(userID: owner)
-                    await MainActor.run { self.ownerEmoji = emoji }
+                    async let emojiTask = PollAPI.fetchOwnerEmoji(userID: owner)
+                    async let profileTask = PollAPI.fetchProfile(userID: owner)
+                    let (emoji, profile) = try await (emojiTask, profileTask)
+                    await MainActor.run {
+                        self.ownerEmoji = emoji
+                        if let name = profile?.username, !name.isEmpty {
+                            self.ownerName = name
+                        }
+                    }
                 } catch {
-                    // 絵文字取得失敗は致命的ではないので握りつぶす
+                    // プロフィール取得失敗は致命的ではないので握りつぶす
                 }
             }
 
