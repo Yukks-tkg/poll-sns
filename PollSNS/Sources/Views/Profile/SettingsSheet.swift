@@ -32,6 +32,18 @@ struct SettingsSheet: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 4) {
+                    if let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+                        Text("みんなの投票 v\(v)")
+                    }
+                    Text("© 2025 Yuki Takagi")
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            }
             .navigationTitle("設定")
             .navigationBarTitleDisplayMode(.inline)
             .listStyle(.insetGrouped)

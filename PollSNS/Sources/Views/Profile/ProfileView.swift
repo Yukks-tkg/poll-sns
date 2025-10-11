@@ -123,12 +123,16 @@ struct ProfileView: View {
         guard let profile = profile else { return "" }
         var details: [String] = []
 
+        if let g = profile.gender, !g.isEmpty {
+            details.append(genderLabel(for: g))
+        }
+
         if let age = profile.age {
             details.append("\(age)歳")
         }
 
-        if let g = profile.gender, !g.isEmpty {
-            details.append(genderLabel(for: g))
+        if let r = profile.region, !r.isEmpty {
+            details.append(r)
         }
 
         return details.joined(separator: "・")

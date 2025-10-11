@@ -41,6 +41,7 @@ struct ProfileEditView: View {
     @State private var gender: Gender = .other
     @State private var age: Int = 20
     @State private var didPreload = false
+    @State private var region: String = "関東"
 
     @Environment(\.dismiss) private var dismiss
 
@@ -51,6 +52,11 @@ struct ProfileEditView: View {
         "🍔","🍣","🍕","🍎","🍩","🍜","🍫","☕️",
 
         "👶","👧","🧒"
+    ]
+
+    private let regions = [
+        "北海道", "東北", "関東", "中部", "近畿",
+        "中国", "四国", "九州・沖縄", "海外"
     ]
 
     private var nicknameError: String? {
@@ -107,6 +113,14 @@ struct ProfileEditView: View {
                     }
                 }
             }
+
+            Section(header: Text("地域")) {
+                Picker("地域", selection: $region) {
+                    ForEach(regions, id: \.self) { r in
+                        Text(r).tag(r)
+                    }
+                }
+            }
         }
         .navigationTitle("プロフィール編集")
         .navigationBarBackButtonHidden(true)
@@ -144,7 +158,8 @@ struct ProfileEditView: View {
             display_name: nickname,
             gender: gender.rawValue,
             age: age,
-            icon_emoji: selectedAvatar
+            icon_emoji: selectedAvatar,
+            region: region
         )
         Task {
             do {
@@ -178,6 +193,7 @@ struct ProfileEditView: View {
         nickname = p.username
         if let a = p.age { age = a }
         if let g = p.gender, let choice = Gender(rawValue: g) { gender = choice } else { gender = .other }
+        if let r = p.region, !r.isEmpty { region = r }
     }
 }
 

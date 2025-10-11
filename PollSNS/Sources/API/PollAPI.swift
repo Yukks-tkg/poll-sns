@@ -47,6 +47,7 @@ enum PollAPI {
         let avatar_type: String?
         let avatar_value: String?
         let avatar_color: String?
+        let region: String?          // ← 追加
         let updated_at: Date?
         let created_at: Date?
     }
@@ -131,6 +132,7 @@ enum PollAPI {
         var gender: String?
         var age: Int?
         var icon_emoji: String?
+        var region: String?
     }
 
     /// 指定ユーザーのプロフィールを 1 件取得（無ければ nil）
@@ -140,7 +142,7 @@ enum PollAPI {
         comps.path = "/rest/v1/profiles"
         comps.queryItems = [
             URLQueryItem(name: "user_id", value: "eq.\(userID.uuidString.lowercased())"),
-            URLQueryItem(name: "select", value: "user_id,username,gender,age,country_code,avatar_type,avatar_value,avatar_color,created_at"),
+            URLQueryItem(name: "select", value: "user_id,username,gender,age,country_code,avatar_type,avatar_value,avatar_color,region,created_at"),
             URLQueryItem(name: "limit", value: "1")
         ]
         let url = comps.url!
@@ -219,6 +221,7 @@ enum PollAPI {
         if let v = input.gender, ["male","female","other"].contains(v) {
             body["gender"] = v
         }
+        if let v = input.region { body["region"] = v }
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"

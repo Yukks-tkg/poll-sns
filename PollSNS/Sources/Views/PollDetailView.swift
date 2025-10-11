@@ -175,7 +175,11 @@ struct PollDetailView: View {
                 HStack {
                     Text(label)
                     Spacer()
-                    Text("\(count)票").foregroundStyle(.secondary)
+                    let ratio = total > 0 ? Double(count) / Double(total) : 0
+                    let percentText = ratio.formatted(.percent.precision(.fractionLength(0)))
+                    Text("\(percentText) (\(count)票)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 GeometryReader { geo in
                     let width = geo.size.width
@@ -196,6 +200,7 @@ struct PollDetailView: View {
         let male: Int
         let female: Int
         let other: Int
+        let grandTotal: Int
         var total: Int { male + female + other }
 
         private let maleColor = Color.blue
@@ -207,7 +212,11 @@ struct PollDetailView: View {
                 HStack {
                     Text(label)
                     Spacer()
-                    Text("\(total)票").foregroundStyle(.secondary)
+                    let ratio = grandTotal > 0 ? Double(total) / Double(grandTotal) : 0
+                    let percentText = ratio.formatted(.percent.precision(.fractionLength(0)))
+                    Text("\(percentText) (\(total)票)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 GeometryReader { geo in
                     let w = geo.size.width
@@ -225,18 +234,44 @@ struct PollDetailView: View {
                 }
                 .frame(height: 8)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        Label("男性 \(male)", systemImage: "square.fill")
-                            .foregroundStyle(maleColor).font(.caption2)
-                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                        Label("女性 \(female)", systemImage: "square.fill")
-                            .foregroundStyle(femaleColor).font(.caption2)
-                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                        Label("その他 \(other)", systemImage: "square.fill")
-                            .foregroundStyle(otherColor).font(.caption2)
-                            .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                ZStack {
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        HStack(spacing: 12) {
+                            let denom = total > 0 ? Double(total) : 0
+                            let malePctText   = (denom > 0 ? Double(male)   / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                            let femalePctText = (denom > 0 ? Double(female) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                            let otherPctText  = (denom > 0 ? Double(other)  / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+
+                            Label("男性 \(malePctText) (\(male)票)", systemImage: "square.fill")
+                                .foregroundStyle(maleColor).font(.caption2)
+                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                            Label("女性 \(femalePctText) (\(female)票)", systemImage: "square.fill")
+                                .foregroundStyle(femaleColor).font(.caption2)
+                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                            Label("その他 \(otherPctText) (\(other)票)", systemImage: "square.fill")
+                                .foregroundStyle(otherColor).font(.caption2)
+                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                        }
+                        .padding(.trailing, 24) // right edge space for chevron
+                        .padding(.bottom, 6)
                     }
+
+                    // right-edge fade to hint scrollability
+                    LinearGradient(
+                        colors: [Color.clear, Color(.systemBackground)],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                    .frame(width: 40)
+                    .allowsHitTesting(false)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+
+                    // chevron indicator
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.trailing, 8)
+                        .allowsHitTesting(false)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .padding(.top, 2)
             }
@@ -250,6 +285,7 @@ struct PollDetailView: View {
         let thirties: Int
         let forties: Int
         let fiftiesPlus: Int
+        let grandTotal: Int
         var total: Int { teens + twenties + thirties + forties + fiftiesPlus }
 
         // 色（好みで調整）
@@ -264,7 +300,11 @@ struct PollDetailView: View {
                 HStack {
                     Text(label)
                     Spacer()
-                    Text("\(total)票").foregroundStyle(.secondary)
+                    let ratio = grandTotal > 0 ? Double(total) / Double(grandTotal) : 0
+                    let percentText = ratio.formatted(.percent.precision(.fractionLength(0)))
+                    Text("\(percentText) (\(total)票)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 GeometryReader { geo in
                     let w = geo.size.width
@@ -290,19 +330,26 @@ struct PollDetailView: View {
                 ZStack {
                     ScrollView(.horizontal, showsIndicators: true) {
                         HStack(spacing: 12) {
-                            Label("10代 \(teens)", systemImage: "square.fill")
+                            let denom = total > 0 ? Double(total) : 0
+                            let p10 = (denom > 0 ? Double(teens) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                            let p20 = (denom > 0 ? Double(twenties) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                            let p30 = (denom > 0 ? Double(thirties) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                            let p40 = (denom > 0 ? Double(forties) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                            let p50 = (denom > 0 ? Double(fiftiesPlus) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+
+                            Label("10代 \(p10) (\(teens)票)", systemImage: "square.fill")
                                 .foregroundStyle(c10).font(.caption2)
                                 .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                            Label("20代 \(twenties)", systemImage: "square.fill")
+                            Label("20代 \(p20) (\(twenties)票)", systemImage: "square.fill")
                                 .foregroundStyle(c20).font(.caption2)
                                 .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                            Label("30代 \(thirties)", systemImage: "square.fill")
+                            Label("30代 \(p30) (\(thirties)票)", systemImage: "square.fill")
                                 .foregroundStyle(c30).font(.caption2)
                                 .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                            Label("40代 \(forties)", systemImage: "square.fill")
+                            Label("40代 \(p40) (\(forties)票)", systemImage: "square.fill")
                                 .foregroundStyle(c40).font(.caption2)
                                 .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                            Label("50代以上 \(fiftiesPlus)", systemImage: "square.fill")
+                            Label("50代以上 \(p50) (\(fiftiesPlus)票)", systemImage: "square.fill")
                                 .foregroundStyle(c50).font(.caption2)
                                 .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                         }
@@ -532,9 +579,9 @@ struct PollDetailView: View {
                 .accessibilityLabel("年代で色分け")
                 .accessibilityValue(colorizeByAge ? "オン" : "オフ")
                 if totalVotes > 0 {
-                    Text("\(totalVotes)票").font(.caption).foregroundStyle(.secondary)
+                    Text("総投票数：\(totalVotes)票").font(.footnote).foregroundStyle(.secondary)
                 } else {
-                    Text("まだ投票はありません").font(.caption).foregroundStyle(.secondary)
+                    Text("まだ投票はありません").font(.footnote).foregroundStyle(.secondary)
                 }
             }
             ForEach(options) { opt in
@@ -545,10 +592,11 @@ struct PollDetailView: View {
                         twenties: ab.twenties,
                         thirties: ab.thirties,
                         forties: ab.forties,
-                        fiftiesPlus: ab.fiftiesPlus
+                        fiftiesPlus: ab.fiftiesPlus,
+                        grandTotal: totalVotes
                     )
                 } else if colorizeByGender, let gb = genderBreakdown[opt.id] {
-                    ResultBarStacked(label: opt.displayText, male: gb.male, female: gb.female, other: gb.other)
+                    ResultBarStacked(label: opt.displayText, male: gb.male, female: gb.female, other: gb.other, grandTotal: totalVotes)
                 } else {
                     let count = countFor(optionID: opt.id)
                     ResultBar(label: opt.displayText, count: count, total: totalVotes)
