@@ -26,6 +26,11 @@ enum AppConfig {
     static func setCurrentUserID(_ id: UUID) {
         KeychainHelper.save(key: userIDKey, value: id.uuidString)
     }
+
+    /// 保存済みの user.id を削除（サインアウト時に使用）
+    static func resetCurrentUserID() {
+        KeychainHelper.delete(key: userIDKey)
+    }
 }
 
 enum KeychainHelper {
@@ -55,5 +60,13 @@ enum KeychainHelper {
               let str = String(data: data, encoding: .utf8)
         else { return nil }
         return str
+    }
+
+    static func delete(key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 }

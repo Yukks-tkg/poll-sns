@@ -22,6 +22,16 @@ final class SupabaseManager {
     func currentUser() -> User? {
         client.auth.currentUser
     }
+
+    // サインアウト（セッション無効化）
+    func signOut() async {
+        do {
+            try await client.auth.signOut()
+        } catch {
+            // 開発用なので失敗しても致命的にはしない（ログのみ）
+            print("⚠️ signOut failed:", error)
+        }
+    }
 }
 
 extension SupabaseManager {

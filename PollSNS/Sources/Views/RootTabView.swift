@@ -11,6 +11,7 @@ struct RootTabView: View {
     // 初回プロフィール強制表示フラグ
     @State private var mustSetupProfile: Bool = false
     @State private var isCheckingProfile = false
+    @State private var signingOut = false
 
     var body: some View {
         TabView(selection: $selected) {
@@ -36,6 +37,21 @@ struct RootTabView: View {
 
             NavigationStack {
                 ProfileView()
+                    .toolbar {
+                        // 開発用：サインアウト
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button {
+                                Task { await signOutAndReauth() }
+                            } label: {
+                                if signingOut {
+                                    ProgressView().scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                                }
+                            }
+                            .accessibilityLabel("サインアウト（開発用）")
+                        }
+                    }
             }
             .tabItem {
                 Label("プロフィール", systemImage: "person.crop.circle")
@@ -47,12 +63,18 @@ struct RootTabView: View {
         }
         // 起動時：まず匿名サインイン（未ログイン時のみ）→ その後プロフィール有無チェック
         .task {
-            _ = await SupabaseManager.shared.ensureSignedInAndCacheUserID()
+            if let uid = await SupabaseManager.shared.ensureSignedInAndCacheUserID() {
+                // ログインできたら profiles に行を自動作成（無ければ）
+                try? await PollAPI.ensureProfileExists(userID: uid)
+            }
             await checkProfileIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             Task {
-                _ = await SupabaseManager.shared.ensureSignedInAndCacheUserID()
+                if let uid = await SupabaseManager.shared.ensureSignedInAndCacheUserID() {
+                    // 復帰時も安全側で自動作成（初回やセッション切れ時に有効）
+                    try? await PollAPI.ensureProfileExists(userID: uid)
+                }
                 await checkProfileIfNeeded()
             }
         }
@@ -61,7 +83,7 @@ struct RootTabView: View {
             NavigationStack {
                 ProfileEditView(userID: AppConfig.currentUserID, initialProfile: nil) {
                     // 保存完了時に再チェック（成功していれば閉じる）
-                    Task { await checkProfileIfNeeded(force: true) }
+                    Task { await checkProfileIfNeeded() }
                 }
             }
             .interactiveDismissDisabled(true) // スワイプで閉じられないように
@@ -73,7 +95,7 @@ struct RootTabView: View {
         mustSetupProfile = value
     }
 
-    private func checkProfileIfNeeded(force: Bool = false) async {
+    private func checkProfileIfNeeded() async {
         if isCheckingProfile { return }
         isCheckingProfile = true
         defer { isCheckingProfile = false }
@@ -91,6 +113,37 @@ struct RootTabView: View {
         } catch {
             // 通信失敗時は安全側でモーダルを出す（ユーザーが保存すれば upsert で作成される）
             await MainActor.run { setMustSetup(true) }
+        }
+    }
+
+    // MARK: - Sign-out flow (開発用)
+    private func signOutAndReauth() async {
+        await MainActor.run { signingOut = true }
+        defer { Task { await MainActor.run { signingOut = false } } }
+
+        // 1) Supabaseセッションを無効化
+        await SupabaseManager.shared.signOut()
+
+        // 2) ローカルの user.id を削除
+        AppConfig.resetCurrentUserID()
+
+        // 3) 匿名サインインやり直し → user.id を保存
+        guard let uid = await SupabaseManager.shared.ensureSignedInAndCacheUserID() else {
+            // 匿名ログイン失敗時は安全側でプロフィール編集を促す
+            await MainActor.run { setMustSetup(true) }
+            return
+        }
+
+        // 4) プロフィール行を自動作成（無ければ）
+        try? await PollAPI.ensureProfileExists(userID: uid)
+
+        // 5) プロフィール状態を再チェック
+        await checkProfileIfNeeded()
+
+        // 6) タイムラインなどの表示を最新化（タブをタイムラインに戻す等は任意）
+        await MainActor.run {
+            selected = .timeline
+            NotificationCenter.default.post(name: .switchToTimeline, object: nil)
         }
     }
 }

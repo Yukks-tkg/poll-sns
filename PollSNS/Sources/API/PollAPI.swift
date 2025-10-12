@@ -239,6 +239,38 @@ enum PollAPI {
         return profile
     }
 
+    // 最小プロフィール（自動作成用）
+    struct MinimalProfile: Codable {
+        let user_id: UUID
+        let username: String?
+        let created_at: Date?
+    }
+
+    /// profiles に行がない場合は新規作成（既にあれば何もしない）
+    static func ensureProfileExists(userID: UUID) async throws {
+        // 既存チェック
+        if let _ = try await fetchProfile(userID: userID) { return }
+
+        // 最低限の行を upsert（username は空）
+        guard let base = URL(string: AppConfig.supabaseURL) else { throw URLError(.badURL) }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/profiles"
+        let url = comps.url!
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("resolution=merge-duplicates", forHTTPHeaderField: "Prefer")
+        addSupabaseHeaders(to: &req)
+
+        let payload = [MinimalProfile(user_id: userID, username: nil, created_at: Date())]
+        req.httpBody = try JSONEncoder().encode(payload)
+
+        let (_, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
+    }
+
 
     // Helper for gender-filtered aggregation: join votes with profiles(gender)
     private struct RawVoteWithProfile: Decodable {
@@ -1202,4 +1234,3 @@ enum PollAPI {
         return try JSONDecoder().decode([Poll].self, from: data)
     }
 }
-
