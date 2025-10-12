@@ -75,6 +75,14 @@ struct PollDetailView: View {
     @State private var colorizeByAge = false
     @State private var ageBreakdown: [UUID: PollAPI.AgeBreakdown] = [:]
 
+    // 地域で色分け表示
+    @State private var colorizeByRegion = false
+    @State private var regionBreakdown: [UUID: PollAPI.RegionBreakdown] = [:]
+
+    // 切替モード（将来: 性別/年代/地域のUIトグルで使用）
+    private enum BreakdownMode { case gender, age, region }
+    @State private var breakdownMode: BreakdownMode = .gender
+
     // Results
     @State private var results: [VoteResult] = []
     @State private var totalVotes: Int = 0
@@ -96,7 +104,6 @@ struct PollDetailView: View {
     @State private var deleting = false
     @State private var deleteError: String?
 
-
     // Lock state (disable interactions when voted / submitting / loading)
     private var isLocked: Bool { voted || isSubmitting || loading }
 
@@ -113,9 +120,7 @@ struct PollDetailView: View {
         }
     }
 
-    // absolute(固定書式) と relative(◯分前) の切り替えに使う
     private func relativeFromAbsoluteString(_ absolute: String) -> String {
-        // 既存の createdAtFormatted は "yyyy/MM/dd HH:mm" 形式想定
         let abs = DateFormatter()
         abs.locale = Locale(identifier: "ja_JP")
         abs.dateFormat = "yyyy/MM/dd HH:mm"
@@ -126,7 +131,6 @@ struct PollDetailView: View {
         return rel.localizedString(for: date, relativeTo: Date())
     }
 
-    // カテゴリ表示（コード -> 絵文字付き日本語ラベル）
     private func displayCategory(_ key: String) -> String {
         let map: [String: String] = [
             "all": "すべて",
@@ -144,7 +148,7 @@ struct PollDetailView: View {
         return map[key] ?? key
     }
 
-    // MARK: - Small subviews (to keep body shallow for type-checker)
+    // MARK: - Small subviews
     private struct OptionRow: View {
         let text: String
         let isSelected: Bool
@@ -252,11 +256,10 @@ struct PollDetailView: View {
                                 .foregroundStyle(otherColor).font(.caption2)
                                 .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                         }
-                        .padding(.trailing, 24) // right edge space for chevron
+                        .padding(.trailing, 24)
                         .padding(.bottom, 6)
                     }
 
-                    // right-edge fade to hint scrollability
                     LinearGradient(
                         colors: [Color.clear, Color(.systemBackground)],
                         startPoint: .leading, endPoint: .trailing
@@ -265,7 +268,6 @@ struct PollDetailView: View {
                     .allowsHitTesting(false)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
-                    // chevron indicator
                     Image(systemName: "chevron.right")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -288,7 +290,6 @@ struct PollDetailView: View {
         let grandTotal: Int
         var total: Int { teens + twenties + thirties + forties + fiftiesPlus }
 
-        // 色（好みで調整）
         private let c10 = Color.blue
         private let c20 = Color.teal
         private let c30 = Color.green
@@ -326,7 +327,6 @@ struct PollDetailView: View {
                 }
                 .frame(height: 8)
 
-                // 凡例（横スクロールしやすさの視覚ヒント：右端フェード＋矢印）
                 ZStack {
                     ScrollView(.horizontal, showsIndicators: true) {
                         HStack(spacing: 12) {
@@ -353,11 +353,10 @@ struct PollDetailView: View {
                                 .foregroundStyle(c50).font(.caption2)
                                 .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                         }
-                        .padding(.trailing, 24) // 右端の矢印と被らない余白
+                        .padding(.trailing, 24)
                         .padding(.bottom, 6)
                     }
 
-                    // 右端フェード（背景色と馴染ませる）
                     LinearGradient(
                         colors: [Color.clear, Color(.systemBackground)],
                         startPoint: .leading, endPoint: .trailing
@@ -366,7 +365,6 @@ struct PollDetailView: View {
                     .allowsHitTesting(false)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
-                    // 右向き矢印
                     Image(systemName: "chevron.right")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -379,18 +377,136 @@ struct PollDetailView: View {
         }
     }
 
+    // 地域用の積み上げバー＋凡例
+    private struct ResultBarStackedRegion: View {
+        let label: String
+        let hokkaido: Int
+        let tohoku: Int
+        let kanto: Int
+        let chubu: Int
+        let kinki: Int
+        let chugoku: Int
+        let shikoku: Int
+        let kyushu_okinawa: Int
+        let overseas: Int
+        let grandTotal: Int
+
+        var total: Int { hokkaido + tohoku + kanto + chubu + kinki + chugoku + shikoku + kyushu_okinawa + overseas }
+
+        // 任意の配色（被らないよう視認性重視）
+        private let cHokkaido = Color.mint
+        private let cTohoku = Color.blue
+        private let cKanto = Color.indigo
+        private let cChubu = Color.teal
+        private let cKinki = Color.green
+        private let cChugoku = Color.orange
+        private let cShikoku = Color.cyan
+        private let cKyushu = Color.pink
+        private let cOverseas = Color.purple
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(label)
+                    Spacer()
+                    let ratio = grandTotal > 0 ? Double(total) / Double(grandTotal) : 0
+                    let percentText = ratio.formatted(.percent.precision(.fractionLength(0)))
+                    Text("\(percentText) (\(total)票)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                GeometryReader { geo in
+                    let w = geo.size.width
+                    let seg: (Int) -> CGFloat = { v in
+                        total > 0 ? w * CGFloat(v) / CGFloat(total) : 0
+                    }
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color(.systemGray5))
+                        HStack(spacing: 0) {
+                            Capsule().fill(cHokkaido).frame(width: seg(hokkaido))
+                            Capsule().fill(cTohoku).frame(width: seg(tohoku))
+                            Capsule().fill(cKanto).frame(width: seg(kanto))
+                            Capsule().fill(cChubu).frame(width: seg(chubu))
+                            Capsule().fill(cKinki).frame(width: seg(kinki))
+                            Capsule().fill(cChugoku).frame(width: seg(chugoku))
+                            Capsule().fill(cShikoku).frame(width: seg(shikoku))
+                            Capsule().fill(cKyushu).frame(width: seg(kyushu_okinawa))
+                            Capsule().fill(cOverseas).frame(width: seg(overseas))
+                        }
+                    }
+                }
+                .frame(height: 8)
+
+                if total > 0 {
+                    ZStack {
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            HStack(spacing: 12) {
+                                let denom = total > 0 ? Double(total) : 0
+                                let pct: (Int) -> String = { v in
+                                    (denom > 0 ? Double(v) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                }
+                                Label("北海道 \(pct(hokkaido)) (\(hokkaido)票)", systemImage: "square.fill")
+                                    .foregroundStyle(cHokkaido).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("東北 \(pct(tohoku)) (\(tohoku)票)", systemImage: "square.fill")
+                                    .foregroundStyle(cTohoku).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("関東 \(pct(kanto)) (\(kanto)票)", systemImage: "square.fill")
+                                    .foregroundStyle(cKanto).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("中部 \(pct(chubu)) (\(chubu)票)", systemImage: "square.fill")
+                                    .foregroundStyle(cChubu).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("近畿 \(pct(kinki)) (\(kinki)票)", systemImage: "square.fill")
+                                    .foregroundStyle(cKinki).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("中国 \(pct(chugoku)) (\(chugoku)票)", systemImage: "square.fill")
+                                    .foregroundStyle(cChugoku).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("四国 \(pct(shikoku)) (\(shikoku)票)", systemImage: "square.fill")
+                                    .foregroundStyle(cShikoku).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("九州・沖縄 \(pct(kyushu_okinawa)) (\(kyushu_okinawa)票)", systemImage: "square.fill")
+                                    .foregroundStyle(cKyushu).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("海外 \(pct(overseas)) (\(overseas)票)", systemImage: "square.fill")
+                                    .foregroundStyle(cOverseas).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                            }
+                            .padding(.trailing, 24)
+                            .padding(.bottom, 6)
+                        }
+
+                        LinearGradient(
+                            colors: [Color.clear, Color(.systemBackground)],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                        .frame(width: 40)
+                        .allowsHitTesting(false)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.trailing, 8)
+                            .allowsHitTesting(false)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                    .padding(.top, 2)
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private var resultsPlaceholder: some View {
         ZStack(alignment: .topLeading) {
-            // 中央寄せにするヒント文（左寄せ）
             Text("投票すると結果が見えます")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .padding(.top, 12)
-
-            // タイトルは左上
             Text("結果")
                 .font(.title3).bold()
                 .multilineTextAlignment(.leading)
@@ -402,7 +518,6 @@ struct PollDetailView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    // 性別フィルタ（UIのみ。切替で結果再読み込み）
     @ViewBuilder
     private var genderFilterBar: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -419,7 +534,6 @@ struct PollDetailView: View {
         .padding(.top, 4)
     }
 
-    // 年代フィルタ（チップ方式で横スクロール。小画面でも省略されない）
     @ViewBuilder
     private var ageFilterBar: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -428,7 +542,6 @@ struct PollDetailView: View {
                 .foregroundStyle(.secondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    // 「すべて」チップ
                     let isAll = (selectedAgeBand == nil)
                     Text("すべて")
                         .font(.subheadline)
@@ -466,7 +579,6 @@ struct PollDetailView: View {
 
     @ViewBuilder
     private var optionsSection: some View {
-        // 選択肢
         if loading {
             ProgressView("読み込み中…")
                 .frame(maxWidth: .infinity, minHeight: 120)
@@ -497,7 +609,6 @@ struct PollDetailView: View {
                             locked: isLocked,
                             onTap: { selectedOptionID = opt.id }
                         )
-                        // 既に投票済みで、かつこの行が自分の選択ならバッジ表示
                         if voted, let label = myChoiceLabel, label == opt.displayText {
                             Label("あなたの選択", systemImage: "checkmark")
                                 .font(.caption)
@@ -531,7 +642,6 @@ struct PollDetailView: View {
 
     @ViewBuilder
     private var resultsSection: some View {
-        // 結果表示
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 8) {
                 Text("結果").font(.title3).bold()
@@ -539,7 +649,8 @@ struct PollDetailView: View {
                 Button {
                     colorizeByGender.toggle()
                     if colorizeByGender {
-                        colorizeByAge = false // 同時ONを避ける
+                        colorizeByAge = false
+                        colorizeByRegion = false
                         Task { await loadGenderBreakdown() }
                     }
                 } label: {
@@ -557,10 +668,12 @@ struct PollDetailView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("性別で色分け")
                 .accessibilityValue(colorizeByGender ? "オン" : "オフ")
+
                 Button {
                     colorizeByAge.toggle()
                     if colorizeByAge {
-                        colorizeByGender = false // 同時ONを避ける
+                        colorizeByGender = false
+                        colorizeByRegion = false
                         Task { await loadAgeBreakdown() }
                     }
                 } label: {
@@ -578,14 +691,53 @@ struct PollDetailView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("年代で色分け")
                 .accessibilityValue(colorizeByAge ? "オン" : "オフ")
+
+                Button {
+                    colorizeByRegion.toggle()
+                    if colorizeByRegion {
+                        colorizeByGender = false
+                        colorizeByAge = false
+                        Task { await loadRegionBreakdown() }
+                    }
+                } label: {
+                    Text("地域")
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(colorizeByRegion ? Color.accentColor.opacity(0.15) : Color.clear)
+                        .foregroundColor(colorizeByRegion ? .accentColor : .secondary)
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule().stroke(colorizeByRegion ? Color.accentColor : Color(.systemGray4), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("地域で色分け")
+                .accessibilityValue(colorizeByRegion ? "オン" : "オフ")
+
                 if totalVotes > 0 {
                     Text("総投票数：\(totalVotes)票").font(.footnote).foregroundStyle(.secondary)
                 } else {
                     Text("まだ投票はありません").font(.footnote).foregroundStyle(.secondary)
                 }
             }
+
             ForEach(options) { opt in
-                if colorizeByAge, let ab = ageBreakdown[opt.id] {
+                if colorizeByRegion, let rb = regionBreakdown[opt.id] {
+                    ResultBarStackedRegion(
+                        label: opt.displayText,
+                        hokkaido: rb.hokkaido,
+                        tohoku: rb.tohoku,
+                        kanto: rb.kanto,
+                        chubu: rb.chubu,
+                        kinki: rb.kinki,
+                        chugoku: rb.chugoku,
+                        shikoku: rb.shikoku,
+                        kyushu_okinawa: rb.kyushu_okinawa,
+                        overseas: rb.overseas,
+                        grandTotal: totalVotes
+                    )
+                } else if colorizeByAge, let ab = ageBreakdown[opt.id] {
                     ResultBarStackedAge(
                         label: opt.displayText,
                         teens: ab.teens,
@@ -612,10 +764,7 @@ struct PollDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-
-                // ヘッダー：作成者 + 作成時刻(トグル) + カテゴリ
                 HStack(alignment: .center, spacing: 12) {
-                    // 簡易アバター（絵文字優先、なければプレースホルダー）
                     ZStack {
                         Circle()
                             .fill(Color.secondary.opacity(0.2))
@@ -646,7 +795,6 @@ struct PollDetailView: View {
 
                     Spacer()
 
-                    // カテゴリチップ
                     Text(displayCategory(poll.category))
                         .font(.caption2)
                         .padding(.horizontal, 8).padding(.vertical, 4)
@@ -654,11 +802,9 @@ struct PollDetailView: View {
                         .clipShape(Capsule())
                 }
 
-                // 問題文
                 Text(poll.question)
                     .font(.title2).bold()
                     .multilineTextAlignment(.leading)
-
 
                 HStack(spacing: 12) {
                 }
@@ -673,7 +819,6 @@ struct PollDetailView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
-        
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -740,7 +885,6 @@ struct PollDetailView: View {
         .task {
             await loadOptions()
 
-            // 投稿者プロフィールを取得（絵文字と名前）
             if let owner = poll.owner_id {
                 do {
                     async let emojiTask = PollAPI.fetchOwnerEmoji(userID: owner)
@@ -753,7 +897,6 @@ struct PollDetailView: View {
                         }
                     }
                 } catch {
-                    // プロフィール取得失敗は致命的ではないので握りつぶす
                 }
             }
 
@@ -763,11 +906,13 @@ struct PollDetailView: View {
                     await MainActor.run {
                         self.voted = true
                         self.myChoiceLabel = detail.1
+                        self.selectedOptionID = detail.0
                     }
                 } else {
                     await MainActor.run {
                         self.voted = false
                         self.myChoiceLabel = nil
+                        self.selectedOptionID = nil
                     }
                 }
                 if await MainActor.run(body: { self.voted }) {
@@ -786,11 +931,15 @@ struct PollDetailView: View {
                     await MainActor.run { self.voted = true }
                     if let optID = note.userInfo?[AppNotificationKey.optionID] as? UUID,
                        let chosen = options.first(where: { $0.id == optID }) {
-                        await MainActor.run { self.myChoiceLabel = chosen.displayText }
+                        await MainActor.run {
+                            self.selectedOptionID = optID
+                            self.myChoiceLabel = chosen.displayText
+                        }
                     }
                     await loadResults()
                     if colorizeByGender { await loadGenderBreakdown() }
                     if colorizeByAge { await loadAgeBreakdown() }
+                    if colorizeByRegion { await loadRegionBreakdown() }
                     await MainActor.run { self.showResults = true }
                 }
             }
@@ -803,6 +952,11 @@ struct PollDetailView: View {
         .onChange(of: colorizeByAge) { on in
             Task {
                 if on { await loadAgeBreakdown() }
+            }
+        }
+        .onChange(of: colorizeByRegion) { on in
+            Task {
+                if on { await loadRegionBreakdown() }
             }
         }
     }
@@ -831,7 +985,6 @@ struct PollDetailView: View {
             results = rows
             totalVotes = rows.reduce(0) { $0 + $1.count }
         } catch {
-            // 結果は無くても UI は出す
             results = []
             totalVotes = 0
         }
@@ -850,6 +1003,7 @@ struct PollDetailView: View {
             await loadResults()
             if colorizeByGender { await loadGenderBreakdown() }
             if colorizeByAge { await loadAgeBreakdown() }
+            if colorizeByRegion { await loadRegionBreakdown() }
             showResults = true
             NotificationCenter.default.post(
                 name: .pollDidVote,
@@ -880,6 +1034,30 @@ struct PollDetailView: View {
             ageBreakdown = Dictionary(uniqueKeysWithValues: list.map { ($0.option_id, $0) })
         } catch {
             ageBreakdown = [:]
+        }
+    }
+
+    @MainActor private func loadRegionBreakdown() async {
+        do {
+            let list = try await PollAPI.fetchRegionBreakdown(for: poll.id)
+
+            // RPCの結果を辞書化
+            var dict = Dictionary(uniqueKeysWithValues: list.map { ($0.option_id, $0) })
+
+            // 返ってこなかった option には 0 で補完
+            for opt in options {
+                if dict[opt.id] == nil {
+                    dict[opt.id] = PollAPI.RegionBreakdown(
+                        option_id: opt.id,
+                        hokkaido: 0, tohoku: 0, kanto: 0, chubu: 0,
+                        kinki: 0, chugoku: 0, shikoku: 0, kyushu_okinawa: 0, overseas: 0
+                    )
+                }
+            }
+
+            regionBreakdown = dict
+        } catch {
+            regionBreakdown = [:]
         }
     }
 

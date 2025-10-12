@@ -12,7 +12,6 @@ struct PollTimelineView: View {
     @State private var votedSet: Set<UUID> = []
     @State private var myChoiceMap: [UUID: String] = [:]
     @State private var showingNewPoll = false
-    private let dummyUserID = UUID(uuidString: "47F61351-7F40-4899-8710-23173BD9C943")!
 
     private let categoryOptions: [(key: String, label: String)] = [
         ("all", "すべて"),
@@ -187,6 +186,7 @@ struct PollTimelineView: View {
 
     private func load() async {
         do {
+            let userID = AppConfig.currentUserID
             let categoryParam = (selectedCategory == "all") ? nil : selectedCategory
             if sortOrder == "popular" {
                 polls = try await PollAPI.fetchPollsPopular(limit: 20, category: categoryParam)
@@ -197,9 +197,9 @@ struct PollTimelineView: View {
             }
             let ids = polls.map(\.id)
             likeCounts = try await PollAPI.fetchLikeCounts(pollIDs: ids)
-            likedSet   = try await PollAPI.fetchUserLiked(pollIDs: ids, userID: dummyUserID)
+            likedSet   = try await PollAPI.fetchUserLiked(pollIDs: ids, userID: userID)
             do {
-                let detail = try await PollAPI.fetchUserVoteDetailMap(pollIDs: ids, userID: dummyUserID)
+                let detail = try await PollAPI.fetchUserVoteDetailMap(pollIDs: ids, userID: userID)
                 self.votedSet = Set(detail.keys)
                 self.myChoiceMap = detail.reduce(into: [:]) { $0[$1.key] = $1.value.1 }
             } catch {
@@ -225,10 +225,11 @@ struct PollTimelineView: View {
         }
 
         do {
+            let userID = AppConfig.currentUserID
             if isLiked {
-                try await PollAPI.unlike(pollID: pollID, userID: dummyUserID)
+                try await PollAPI.unlike(pollID: pollID, userID: userID)
             } else {
-                try await PollAPI.like(pollID: pollID, userID: dummyUserID)
+                try await PollAPI.like(pollID: pollID, userID: userID)
             }
         } catch {
             if isLiked {

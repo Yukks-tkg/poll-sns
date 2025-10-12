@@ -45,12 +45,16 @@ struct RootTabView: View {
         .onReceive(NotificationCenter.default.publisher(for: .switchToTimeline)) { _ in
             selected = .timeline
         }
-        // 起動時・表示時にプロフィール有無をチェック
+        // 起動時：まず匿名サインイン（未ログイン時のみ）→ その後プロフィール有無チェック
         .task {
+            _ = await SupabaseManager.shared.ensureSignedInAndCacheUserID()
             await checkProfileIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            Task { await checkProfileIfNeeded() }
+            Task {
+                _ = await SupabaseManager.shared.ensureSignedInAndCacheUserID()
+                await checkProfileIfNeeded()
+            }
         }
         // 未設定ならフルスクリーンで編集を強制表示
         .fullScreenCover(isPresented: $mustSetupProfile) {

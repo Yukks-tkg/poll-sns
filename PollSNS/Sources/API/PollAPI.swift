@@ -339,6 +339,81 @@ enum PollAPI {
                          fiftiesPlus: r.fiftiesplus)
         }
     }
+
+    // Region breakdown per option (北海道/東北/関東/中部/近畿/中国/四国/九州・沖縄/海外)
+    struct RegionBreakdown: Codable, Identifiable {
+        let option_id: UUID
+        var hokkaido: Int
+        var tohoku: Int
+        var kanto: Int
+        var chubu: Int
+        var kinki: Int
+        var chugoku: Int
+        var shikoku: Int
+        var kyushu_okinawa: Int
+        var overseas: Int
+        var total: Int { hokkaido + tohoku + kanto + chubu + kinki + chugoku + shikoku + kyushu_okinawa + overseas }
+        var id: UUID { option_id }
+    }
+
+    /// 各選択肢ごとの地域内訳（北海道/東北/関東/中部/近畿/中国/四国/九州・沖縄/海外）を取得します。
+    /// RPC `fetch_region_breakdown(_poll_id uuid)` は
+    /// (option_id uuid, hokkaido int, tohoku int, kanto int, chubu int, kinki int,
+    ///  chugoku int, shikoku int, kyushu_okinawa int, overseas int)
+    /// の **横持ち** 形式を返すため、そのまま `RegionBreakdown` としてデコードします。
+    /// 互換性のため、旧形式（region/votes の縦持ち）もフォールバックで対応します。
+    static func fetchRegionBreakdown(for pollID: UUID) async throws -> [RegionBreakdown] {
+        guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/rpc/fetch_region_breakdown"
+        let url = comps.url!
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        addSupabaseHeaders(to: &req)
+
+        let body: [String: Any] = ["_poll_id": pollID.uuidString]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
+
+        let dec = JSONDecoder()
+
+        // 新RPC（横持ち）: そのまま RegionBreakdown としてデコード
+        if let list = try? dec.decode([RegionBreakdown].self, from: data) {
+            return list
+        }
+
+        // 旧RPC（縦持ち）: option_id / region / votes を集約して RegionBreakdown に作り直す
+        struct OldRow: Decodable { let option_id: UUID; let region: String; let votes: Int }
+        let rows = try dec.decode([OldRow].self, from: data)
+        var map: [UUID: RegionBreakdown] = [:]
+        func empty(_ id: UUID) -> RegionBreakdown {
+            RegionBreakdown(option_id: id,
+                            hokkaido: 0, tohoku: 0, kanto: 0, chubu: 0, kinki: 0,
+                            chugoku: 0, shikoku: 0, kyushu_okinawa: 0, overseas: 0)
+        }
+        for r in rows {
+            var agg = map[r.option_id] ?? empty(r.option_id)
+            switch r.region {
+            case "北海道", "hokkaido": agg.hokkaido = r.votes
+            case "東北", "tohoku": agg.tohoku = r.votes
+            case "関東", "kanto": agg.kanto = r.votes
+            case "中部", "chubu": agg.chubu = r.votes
+            case "近畿", "関西", "kinki": agg.kinki = r.votes
+            case "中国", "chugoku": agg.chugoku = r.votes
+            case "四国", "shikoku": agg.shikoku = r.votes
+            case "九州・沖縄", "九州沖縄", "kyushu_okinawa": agg.kyushu_okinawa = r.votes
+            case "海外", "overseas": agg.overseas = r.votes
+            default: break
+            }
+            map[r.option_id] = agg
+        }
+        return Array(map.values)
+    }
     static func fetchResults(for pollID: UUID, gender: String? = nil, ageMin: Int? = nil, ageMax: Int? = nil) async throws -> [VoteResult] {
         // If gender or age is specified, join profiles to read gender/age and aggregate client-side
         if (gender != nil) || (ageMin != nil) || (ageMax != nil) {
@@ -737,29 +812,24 @@ enum PollAPI {
         }
     }
 
-    // MARK: - Vote (Upsert: duplicate -> 2xx)
+    // MARK: - Vote (RPC: submit_vote)
     static func submitVote(pollID: UUID, optionID: UUID, userID: UUID) async throws {
         guard let base = URL(string: AppConfig.supabaseURL) else { return }
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
-        comps.path = "/rest/v1/votes"
-        // ★ 既存投票（poll_id,user_id）があっても 2xx を返すための Upsert 指定
-        comps.queryItems = [
-            URLQueryItem(name: "on_conflict", value: "poll_id,user_id")
-        ]
+        comps.path = "/rest/v1/rpc/submit_vote"
         let url = comps.url!
+
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        addSupabaseHeaders(to: &req) // 共通ヘッダー適用
-        // ★ 重複時はマージ扱い（409を返さず 2xx にする）＋最小レスポンス
-        req.setValue("resolution=merge-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
+        addSupabaseHeaders(to: &req)
 
-        let payload: [String: String] = [
-            "poll_id":   pollID.uuidString.uppercased(),
-            "user_id":   userID.uuidString.uppercased(),
-            "option_id": optionID.uuidString.uppercased()
+        let body: [String: Any] = [
+            "_poll_id": pollID.uuidString.uppercased(),
+            "_option_id": optionID.uuidString.uppercased(),
+            "_user_id": userID.uuidString.uppercased()
         ]
-        req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
 
         let (_, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1

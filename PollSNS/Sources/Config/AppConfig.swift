@@ -21,6 +21,11 @@ enum AppConfig {
         KeychainHelper.save(key: userIDKey, value: newID.uuidString)
         return newID
     }
+
+    /// Supabase の user.id(UUID) を Keychain に保存する
+    static func setCurrentUserID(_ id: UUID) {
+        KeychainHelper.save(key: userIDKey, value: id.uuidString)
+    }
 }
 
 enum KeychainHelper {
