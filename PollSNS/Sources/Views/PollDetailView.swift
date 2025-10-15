@@ -17,6 +17,8 @@ struct PollDetailView: View {
     @State private var errorMessage: String?
     @State private var myChoiceLabel: String? = nil
     @State private var showAbsoluteTime = false
+    // 追加: description の補完用
+    @State private var descriptionText: String? = nil
 
     // MARK: - Gender filter (UI only for now)
     private enum GenderFilter: String, CaseIterable, Identifiable {
@@ -577,6 +579,28 @@ struct PollDetailView: View {
         .padding(.top, 4)
     }
 
+    // 背景（description）セクション
+    @ViewBuilder
+    private var backgroundSection: some View {
+        if let desc = (descriptionText ?? poll.description),
+           !desc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("質問したきっかけ")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Text(desc)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .textSelection(.enabled)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
     @ViewBuilder
     private var optionsSection: some View {
         if loading {
@@ -722,34 +746,50 @@ struct PollDetailView: View {
                 }
             }
 
-            ForEach(options) { opt in
-                if colorizeByRegion, let rb = regionBreakdown[opt.id] {
+            // ForEach の中で複数型を返さないよう、モード別に ForEach を分割
+            if colorizeByRegion {
+                ForEach(options) { opt in
+                    let rb = regionBreakdown[opt.id]
                     ResultBarStackedRegion(
                         label: opt.displayText,
-                        hokkaido: rb.hokkaido,
-                        tohoku: rb.tohoku,
-                        kanto: rb.kanto,
-                        chubu: rb.chubu,
-                        kinki: rb.kinki,
-                        chugoku: rb.chugoku,
-                        shikoku: rb.shikoku,
-                        kyushu_okinawa: rb.kyushu_okinawa,
-                        overseas: rb.overseas,
+                        hokkaido: rb?.hokkaido ?? 0,
+                        tohoku: rb?.tohoku ?? 0,
+                        kanto: rb?.kanto ?? 0,
+                        chubu: rb?.chubu ?? 0,
+                        kinki: rb?.kinki ?? 0,
+                        chugoku: rb?.chugoku ?? 0,
+                        shikoku: rb?.shikoku ?? 0,
+                        kyushu_okinawa: rb?.kyushu_okinawa ?? 0,
+                        overseas: rb?.overseas ?? 0,
                         grandTotal: totalVotes
                     )
-                } else if colorizeByAge, let ab = ageBreakdown[opt.id] {
+                }
+            } else if colorizeByAge {
+                ForEach(options) { opt in
+                    let ab = ageBreakdown[opt.id]
                     ResultBarStackedAge(
                         label: opt.displayText,
-                        teens: ab.teens,
-                        twenties: ab.twenties,
-                        thirties: ab.thirties,
-                        forties: ab.forties,
-                        fiftiesPlus: ab.fiftiesPlus,
+                        teens: ab?.teens ?? 0,
+                        twenties: ab?.twenties ?? 0,
+                        thirties: ab?.thirties ?? 0,
+                        forties: ab?.forties ?? 0,
+                        fiftiesPlus: ab?.fiftiesPlus ?? 0,
                         grandTotal: totalVotes
                     )
-                } else if colorizeByGender, let gb = genderBreakdown[opt.id] {
-                    ResultBarStacked(label: opt.displayText, male: gb.male, female: gb.female, other: gb.other, grandTotal: totalVotes)
-                } else {
+                }
+            } else if colorizeByGender {
+                ForEach(options) { opt in
+                    let gb = genderBreakdown[opt.id]
+                    ResultBarStacked(
+                        label: opt.displayText,
+                        male: gb?.male ?? 0,
+                        female: gb?.female ?? 0,
+                        other: gb?.other ?? 0,
+                        grandTotal: totalVotes
+                    )
+                }
+            } else {
+                ForEach(options) { opt in
                     let count = countFor(optionID: opt.id)
                     ResultBar(label: opt.displayText, count: count, total: totalVotes)
                 }
@@ -761,50 +801,104 @@ struct PollDetailView: View {
         .opacity(showResults ? 1 : 0.4)
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .center, spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.secondary.opacity(0.2))
-                            .frame(width: 34, height: 34)
-                        if let e = ownerEmoji, !e.isEmpty {
-                            Text(e)
-                                .font(.system(size: 20))
-                        } else {
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(ownerText)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-
-                        if let created = poll.createdAtFormatted {
-                            Text(showAbsoluteTime ? created : relativeFromAbsoluteString(created))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .onTapGesture { showAbsoluteTime.toggle() }
-                                .animation(.default, value: showAbsoluteTime)
-                        }
-                    }
-
-                    Spacer()
-
-                    Text(displayCategory(poll.category))
-                        .font(.caption2)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Color(.systemGray6))
-                        .clipShape(Capsule())
+    // MARK: - Header section (extracted from body)
+    @ViewBuilder
+    private var headerSection: some View {
+        HStack(alignment: .center, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.secondary.opacity(0.2))
+                    .frame(width: 34, height: 34)
+                if let e = ownerEmoji, !e.isEmpty {
+                    Text(e)
+                        .font(.system(size: 20))
+                } else {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ownerText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                if let created = poll.createdAtFormatted {
+                    Text(showAbsoluteTime ? created : relativeFromAbsoluteString(created))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .onTapGesture { showAbsoluteTime.toggle() }
+                        .animation(.default, value: showAbsoluteTime)
+                }
+            }
+
+            Spacer()
+
+            Text(displayCategory(poll.category))
+                .font(.caption2)
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Color(.systemGray6))
+                .clipShape(Capsule())
+        }
+    }
+
+    // MARK: - Bindings / extracted views to reduce type-check cost
+    private var isDeleteErrorPresented: Binding<Bool> {
+        Binding<Bool>(
+            get: { deleteError != nil },
+            set: { newValue in
+                if !newValue { deleteError = nil }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var reportSheetView: some View {
+        ReportSheet(
+            pollID: poll.id,
+            reporterUserID: AppConfig.currentUserID,
+            onDone: {
+                showReportThanks = true
+            }
+        )
+        .presentationDetents([.medium, .large])
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                Button(role: .destructive) {
+                    showReport = true
+                } label: {
+                    Label("通報する", systemImage: "exclamationmark.bubble")
+                }
+                if let owner = poll.owner_id, owner == AppConfig.currentUserID {
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Label("投稿を削除", systemImage: "trash")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+        }
+    }
+
+    var body: some View {
+        // ScrollView とその直後の軽い修飾子までをいったん確定
+        let base = ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                headerSection
 
                 Text(poll.question)
                     .font(.title2).bold()
                     .multilineTextAlignment(.leading)
+
+                // 背景（description）カード
+                backgroundSection
 
                 HStack(spacing: 12) {
                 }
@@ -820,42 +914,18 @@ struct PollDetailView: View {
             .padding(.vertical, 16)
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button(role: .destructive) {
-                        showReport = true
-                    } label: {
-                        Label("通報する", systemImage: "exclamationmark.bubble")
-                    }
-                    if let owner = poll.owner_id, owner == AppConfig.currentUserID {
-                        Button(role: .destructive) {
-                            showDeleteConfirm = true
-                        } label: {
-                            Label("投稿を削除", systemImage: "trash")
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-            }
-        }
-        .sheet(isPresented: $showReport) {
-            ReportSheet(
-                pollID: poll.id,
-                reporterUserID: AppConfig.currentUserID,
-                onDone: {
-                    showReportThanks = true
-                }
-            )
-            .presentationDetents([.medium, .large])
-        }
-        .alert("ご協力ありがとうございます", isPresented: $showReportThanks) {
+        .toolbar { toolbarContent }
+
+        // 重い修飾子を段階的に適用（型推論の分割）
+        let withSheet = base.sheet(isPresented: $showReport) { reportSheetView }
+
+        let withThanks = withSheet.alert("ご協力ありがとうございます", isPresented: $showReportThanks) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("不適切な投稿の通報を受け付けました。確認までしばらくお待ちください。")
         }
-        .alert("この投稿を削除しますか？", isPresented: $showDeleteConfirm) {
+
+        let withDelete = withThanks.alert("この投稿を削除しますか？", isPresented: $showDeleteConfirm) {
             Button("キャンセル", role: .cancel) {}
             Button(deleting ? "削除中…" : "削除", role: .destructive) {
                 Task {
@@ -877,88 +947,106 @@ struct PollDetailView: View {
         } message: {
             Text("削除すると他のユーザーからは見えなくなります（通報・ログは保持されます）。")
         }
-        .alert("エラー", isPresented: .constant(deleteError != nil)) {
+
+        let withError = withDelete.alert("エラー", isPresented: isDeleteErrorPresented) {
             Button("OK") { deleteError = nil }
         } message: {
             Text(deleteError ?? "")
         }
-        .task {
-            await loadOptions()
 
-            if let owner = poll.owner_id {
-                do {
-                    async let emojiTask = PollAPI.fetchOwnerEmoji(userID: owner)
-                    async let profileTask = PollAPI.fetchProfile(userID: owner)
-                    let (emoji, profile) = try await (emojiTask, profileTask)
-                    await MainActor.run {
-                        self.ownerEmoji = emoji
-                        if let name = profile?.username, !name.isEmpty {
-                            self.ownerName = name
+        // 最終的なイベント系修飾子を適用して返す
+        return withError
+            .task {
+                await loadOptions()
+
+                // 追加: description が空なら詳細を取得して補完
+                if (poll.description == nil || poll.description?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true) {
+                    do {
+                        if let detailed = try await PollAPI.fetchPollDetail(id: poll.id),
+                           let desc = detailed.description,
+                           !desc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            descriptionText = desc
                         }
+                    } catch {
+                        // 補完失敗は無視（背景は非表示のまま）
+                    }
+                }
+
+                if let owner = poll.owner_id {
+                    do {
+                        async let emojiTask = PollAPI.fetchOwnerEmoji(userID: owner)
+                        async let profileTask = PollAPI.fetchProfile(userID: owner)
+                        let (emoji, profile) = try await (emojiTask, profileTask)
+                        await MainActor.run {
+                            self.ownerEmoji = emoji
+                            if let name = profile?.username, !name.isEmpty {
+                                self.ownerName = name
+                            }
+                        }
+                    } catch {
+                    }
+                }
+
+                do {
+                    let map = try await PollAPI.fetchUserVoteDetailMap(pollIDs: [poll.id], userID: AppConfig.currentUserID)
+                    if let detail = map[poll.id] {
+                        await MainActor.run {
+                            self.voted = true
+                            self.myChoiceLabel = detail.1
+                            self.selectedOptionID = detail.0
+                        }
+                    } else {
+                        await MainActor.run {
+                            self.voted = false
+                            self.myChoiceLabel = nil
+                            self.selectedOptionID = nil
+                        }
+                    }
+                    let hasVoted = await MainActor.run { self.voted }
+                    if hasVoted {
+                        await loadResults()
+                        await MainActor.run { self.showResults = true }
+                    } else {
+                        await MainActor.run { self.showResults = false }
                     }
                 } catch {
-                }
-            }
-
-            do {
-                let map = try await PollAPI.fetchUserVoteDetailMap(pollIDs: [poll.id], userID: AppConfig.currentUserID)
-                if let detail = map[poll.id] {
-                    await MainActor.run {
-                        self.voted = true
-                        self.myChoiceLabel = detail.1
-                        self.selectedOptionID = detail.0
-                    }
-                } else {
-                    await MainActor.run {
-                        self.voted = false
-                        self.myChoiceLabel = nil
-                        self.selectedOptionID = nil
-                    }
-                }
-                if await MainActor.run(body: { self.voted }) {
-                    await loadResults()
-                    await MainActor.run { self.showResults = true }
-                } else {
                     await MainActor.run { self.showResults = false }
                 }
-            } catch {
-                await MainActor.run { self.showResults = false }
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .pollDidVote)) { note in
-            Task {
-                if let id = note.userInfo?[AppNotificationKey.pollID] as? UUID, id == poll.id {
-                    await MainActor.run { self.voted = true }
-                    if let optID = note.userInfo?[AppNotificationKey.optionID] as? UUID,
-                       let chosen = options.first(where: { $0.id == optID }) {
-                        await MainActor.run {
-                            self.selectedOptionID = optID
-                            self.myChoiceLabel = chosen.displayText
+            .onReceive(NotificationCenter.default.publisher(for: .pollDidVote)) { note in
+                Task {
+                    if let id = note.userInfo?[AppNotificationKey.pollID] as? UUID, id == poll.id {
+                        await MainActor.run { self.voted = true }
+                        if let optID = note.userInfo?[AppNotificationKey.optionID] as? UUID,
+                           let chosen = options.first(where: { $0.id == optID }) {
+                            await MainActor.run {
+                                self.selectedOptionID = optID
+                                self.myChoiceLabel = chosen.displayText
+                            }
                         }
+                        await loadResults()
+                        if colorizeByGender { await loadGenderBreakdown() }
+                        if colorizeByAge { await loadAgeBreakdown() }
+                        if colorizeByRegion { await loadRegionBreakdown() }
+                        await MainActor.run { self.showResults = true }
                     }
-                    await loadResults()
-                    if colorizeByGender { await loadGenderBreakdown() }
-                    if colorizeByAge { await loadAgeBreakdown() }
-                    if colorizeByRegion { await loadRegionBreakdown() }
-                    await MainActor.run { self.showResults = true }
                 }
             }
-        }
-        .onChange(of: colorizeByGender) { on in
-            Task {
-                if on { await loadGenderBreakdown() }
+            .onChange(of: colorizeByGender) { on in
+                Task {
+                    if on { await loadGenderBreakdown() }
+                }
             }
-        }
-        .onChange(of: colorizeByAge) { on in
-            Task {
-                if on { await loadAgeBreakdown() }
+            .onChange(of: colorizeByAge) { on in
+                Task {
+                    if on { await loadAgeBreakdown() }
+                }
             }
-        }
-        .onChange(of: colorizeByRegion) { on in
-            Task {
-                if on { await loadRegionBreakdown() }
+            .onChange(of: colorizeByRegion) { on in
+                Task {
+                    if on { await loadRegionBreakdown() }
+                }
             }
-        }
     }
 
     // MARK: - Actions

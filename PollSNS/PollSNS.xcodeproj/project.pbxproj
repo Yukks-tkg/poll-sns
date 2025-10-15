@@ -54,10 +54,16 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		0261FDE32E9C8A3200D59536 /* Exceptions for "Common" folder in "PollSNS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AppNotifications.swift,
+			);
+			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
+		};
 		02F2CE522E7E934D00B080A7 /* Exceptions for "Views" folder in "PollSNS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Legal/LegalDocumentView.swift,
 				NewPollView.swift,
 				PollDetailView.swift,
 				PollTimelineView.swift,
@@ -94,13 +100,6 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AppConfig.swift,
-			);
-			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
-		};
-		02F2CE702E8A2C3D00B080A7 /* Exceptions for "Utils" folder in "PollSNS" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				AppNotifications.swift,
 			);
 			target = 0242C2092E7BAB300065FDEE /* PollSNS */;
 		};
@@ -149,21 +148,11 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
-		02F2CE6D2E8A2BAC00B080A7 /* Utils */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				02F2CE702E8A2C3D00B080A7 /* Exceptions for "Utils" folder in "PollSNS" target */,
-			);
-			path = Utils;
-			sourceTree = "<group>";
-		};
-		02F2CE742E8C3B9500B080A7 /* Legal */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Legal;
-			sourceTree = "<group>";
-		};
 		02F2CE892E8CFD5900B080A7 /* Common */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				0261FDE32E9C8A3200D59536 /* Exceptions for "Common" folder in "PollSNS" target */,
+			);
 			path = Common;
 			sourceTree = "<group>";
 		};
@@ -237,7 +226,6 @@
 		0242C2372E7BB8D00065FDEE /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				02F2CE742E8C3B9500B080A7 /* Legal */,
 				0242C2362E7BB8D00065FDEE /* .gitkeep */,
 				0242C2422E7BBB3B0065FDEE /* Localizable.strings */,
 			);
@@ -248,7 +236,6 @@
 			isa = PBXGroup;
 			children = (
 				02F2CE892E8CFD5900B080A7 /* Common */,
-				02F2CE6D2E8A2BAC00B080A7 /* Utils */,
 				02F2CE372E7C63D800B080A7 /* Views */,
 				02F2CE352E7C2FB600B080A7 /* API */,
 				02F2CE332E7C2EF100B080A7 /* Config */,
@@ -285,7 +272,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				0242C20C2E7BAB300065FDEE /* PollSNS */,
-				02F2CE742E8C3B9500B080A7 /* Legal */,
 			);
 			name = PollSNS;
 			packageProductDependencies = (

@@ -14,6 +14,13 @@ struct NewPollView: View {
     @State private var category: String = "food"
     @State private var options: [String] = ["", ""] // 2つ
 
+    // 任意: 作成した経緯・背景
+    @State private var descriptionText: String = ""
+    private let descriptionMax = 300
+    private var isDescriptionWithinLimit: Bool {
+        descriptionText.count <= descriptionMax
+    }
+
     @State private var isSubmitting = false
     @State private var errorMessage: String?
 
@@ -37,8 +44,9 @@ struct NewPollView: View {
 
     var body: some View {
         Form {
-            Section("質問") {
-                TextField("例: 今夜の晩ごはんは？", text: $question, axis: .vertical)
+            // 質問
+            Section("質問【必須】") {
+                TextField("例: 睡眠時間は平均してどれくらいですか？", text: $question, axis: .vertical)
                     .lineLimit(2...5)
                     .textInputAutocapitalization(.never)
                 HStack {
@@ -48,7 +56,7 @@ struct NewPollView: View {
                         .font(.footnote)
                 }
             }
-            // 質問が短すぎる場合の注意（あと何文字必要か）
+            // 質問の注意
             let _trimmedQ = question.trimmingCharacters(in: .whitespacesAndNewlines)
             if _trimmedQ.count > 0 && _trimmedQ.count < 5 {
                 Section {
@@ -63,7 +71,9 @@ struct NewPollView: View {
                         .font(.footnote)
                 }
             }
-            Section("カテゴリ") {
+
+            // カテゴリ
+            Section("カテゴリ【必須】") {
                 Picker("カテゴリ", selection: $category) {
                     ForEach(categories, id: \.key) { c in
                         Text(c.label).tag(c.key)
@@ -71,7 +81,9 @@ struct NewPollView: View {
                 }
                 .pickerStyle(.navigationLink)
             }
-            Section("選択肢（2つ以上）") {
+
+            // 選択肢
+            Section("選択肢【必須】") {
                 ForEach(options.indices, id: \.self) { i in
                     HStack {
                         Text("\(i+1).")
@@ -89,7 +101,6 @@ struct NewPollView: View {
                             .accessibilityLabel("この行を削除")
                         }
                     }
-                    // 右スワイプで削除（Form内でも有効）
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         if options.count > 2 {
                             Button(role: .destructive) {
@@ -108,6 +119,28 @@ struct NewPollView: View {
                 .disabled(options.count >= 8)
             }
 
+            // 任意: 作成した経緯・背景（質問と同じUI構成）
+            Section("質問を作成した経緯・背景【任意】") {
+                TextField("例: 仕事の関係で睡眠時間が変わりがちです。皆どのくらい寝ているのか参考にしたいです。", text: $descriptionText, axis: .vertical)
+                    .lineLimit(2...6)
+                    .textInputAutocapitalization(.never)
+                HStack {
+                    Spacer()
+                    Text("\(descriptionText.count) / \(descriptionMax)")
+                        .foregroundColor(descriptionText.count > descriptionMax ? .red : .secondary)
+                        .font(.footnote)
+                }
+            }
+            let _trimmedDesc = descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if _trimmedDesc.count > descriptionMax {
+                Section {
+                    Text("\(descriptionMax)文字以内で入力してください")
+                        .foregroundColor(.red)
+                        .font(.footnote)
+                }
+            }
+
+            // エラー表示
             if let msg = errorMessage {
                 Section {
                     Text(msg).foregroundColor(.red)
@@ -126,20 +159,24 @@ struct NewPollView: View {
                 Button(isSubmitting ? "作成中…" : "投稿") {
                     Task { await submit() }
                 }
-                .disabled(!isValid || isSubmitting)
+                .disabled(!isValid || isSubmitting || !isDescriptionWithinLimit)
             }
         }
     }
 
     private func submit() async {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard q.count >= 5 && q.count <= 80 && isValid else { return }
+        guard q.count >= 5 && q.count <= 80 && isValid && isDescriptionWithinLimit else { return }
         isSubmitting = true; errorMessage = nil
         do {
+            let descTrimmed = descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let desc: String? = descTrimmed.isEmpty ? nil : String(descTrimmed.prefix(descriptionMax))
+
             let id = try await PollAPI.createPoll(
                 question: question.trimmingCharacters(in: .whitespacesAndNewlines),
                 category: category,
-                options: validOptions
+                options: validOptions,
+                description: desc
             )
             onCreated(id)   // 親に通知
             dismiss()

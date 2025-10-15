@@ -1,4 +1,3 @@
-
 import Foundation
 
 // MARK: - Shared JSON decoder (ISO8601 dates; allow fractional seconds)
@@ -700,6 +699,31 @@ enum PollAPI {
         return polls
     }
 
+    /// Poll を1件だけ取得（deleted_at is null のみ対象）
+    static func fetchPollDetail(id: UUID) async throws -> Poll? {
+        guard let base = URL(string: AppConfig.supabaseURL) else { return nil }
+        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        comps.path = "/rest/v1/polls"
+        comps.queryItems = [
+            URLQueryItem(name: "id", value: "eq.\(id.uuidString.uppercased())"),
+            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id,description"),
+            URLQueryItem(name: "deleted_at", value: "is.null"),
+            URLQueryItem(name: "limit", value: "1")
+        ]
+        let url = comps.url!
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        addSupabaseHeaders(to: &req)
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
+
+        let rows = try JSONDecoder().decode([Poll].self, from: data)
+        return rows.first
+    }
+
     // MARK: - Options
     /// 選択肢一覧を取得
     static func fetchOptions(for pollID: UUID) async throws -> [PollOption] {
@@ -730,7 +754,8 @@ enum PollAPI {
     /// 成功時は作成された Poll の id を返す
     static func createPoll(question: String,
                            category: String,
-                           options: [String]) async throws -> UUID {
+                           options: [String],
+                           description: String? = nil) async throws -> UUID {
         // 1) polls を1行作成（return=representation で id を貰う）
         guard let base = URL(string: AppConfig.supabaseURL) else { throw URLError(.badURL) }
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
@@ -744,7 +769,7 @@ enum PollAPI {
         // 作成後の行を返してもらう
         reqPoll.setValue("return=representation", forHTTPHeaderField: "Prefer")
 
-        let pollPayload: [String: Any] = [
+        var pollPayload: [String: Any] = [
             "question": question,
             "category": category,
             // 端末ごとの currentUserID を利用（本番は Supabase Auth の JWT から付与）
@@ -752,6 +777,9 @@ enum PollAPI {
             // タイムラインで誰でも見えるように公開
             "is_public": true
         ]
+        if let d = description, !d.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            pollPayload["description"] = d
+        }
         reqPoll.httpBody = try JSONSerialization.data(withJSONObject: pollPayload)
 
         let (pData, pResp) = try await URLSession.shared.data(for: reqPoll)
@@ -881,7 +909,7 @@ enum PollAPI {
         comps.path = "/rest/v1/polls"
 
         var items: [URLQueryItem] = [
-            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id"),
+            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id,description"),
             URLQueryItem(name: "order", value: order),
             URLQueryItem(name: "limit", value: "\(limit)"),
             URLQueryItem(name: "deleted_at", value: "is.null")
@@ -911,7 +939,7 @@ enum PollAPI {
         comps.path = "/rest/v1/polls_popular"
 
         var items: [URLQueryItem] = [
-            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id,like_count"),
+            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id,like_count,description"),
             URLQueryItem(name: "order", value: "like_count.desc,created_at.desc"),
             URLQueryItem(name: "limit", value: "\(limit)")
         ]
@@ -1128,7 +1156,7 @@ enum PollAPI {
         comps.path = "/rest/v1/polls"
         comps.queryItems = [
             URLQueryItem(name: "id", value: "in.(\(idList))"),
-            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id"),
+            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id,description"),
             URLQueryItem(name: "order", value: "created_at.desc"),
             URLQueryItem(name: "limit", value: "\(ids.count)"),
             URLQueryItem(name: "deleted_at", value: "is.null")
@@ -1159,7 +1187,7 @@ enum PollAPI {
         comps.path = "/rest/v1/polls"
         comps.queryItems = [
             URLQueryItem(name: "owner_id", value: "eq.\(ownerID.uuidString.uppercased())"),
-            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id"),
+            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id,description"),
             URLQueryItem(name: "order", value: order),
             URLQueryItem(name: "limit", value: "\(limit)"),
             URLQueryItem(name: "deleted_at", value: "is.null")
@@ -1217,7 +1245,7 @@ enum PollAPI {
         let inList = ids.map { $0.uuidString.uppercased() }.joined(separator: ",")
         comps.queryItems = [
             URLQueryItem(name: "id", value: "in.(\(inList))"),
-            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id"),
+            URLQueryItem(name: "select", value: "id,question,category,created_at,owner_id,description"),
             URLQueryItem(name: "order", value: order),
             URLQueryItem(name: "limit", value: "\(limit)"),
             URLQueryItem(name: "deleted_at", value: "is.null")

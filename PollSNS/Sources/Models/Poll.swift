@@ -7,6 +7,8 @@ struct Poll: Identifiable, Decodable {
     let owner_id: UUID?
     let created_at: String?
     let like_count: Int?
+    // 新規: 任意の説明
+    let description: String?
 }
 
 extension Poll {
@@ -26,3 +28,4 @@ extension Poll {
         return formatter.string(from: date)
     }
 }
+

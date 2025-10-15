@@ -12,6 +12,9 @@ enum AppConfig {
     }
     private static let userIDKey = "com.pollsns.user_id"
 
+    // ユーザーID変更通知（サインアウト/再サインイン時に発火）
+    static let userIDDidChange = Notification.Name("AppConfig.userIDDidChange")
+
     static var currentUserID: UUID {
         if let existing = KeychainHelper.load(key: userIDKey),
            let id = UUID(uuidString: existing) {
@@ -25,11 +28,27 @@ enum AppConfig {
     /// Supabase の user.id(UUID) を Keychain に保存する
     static func setCurrentUserID(_ id: UUID) {
         KeychainHelper.save(key: userIDKey, value: id.uuidString)
+        // 変更通知は常にメインスレッドで発火
+        if Thread.isMainThread {
+            NotificationCenter.default.post(name: userIDDidChange, object: nil, userInfo: ["userID": id])
+        } else {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: userIDDidChange, object: nil, userInfo: ["userID": id])
+            }
+        }
     }
 
     /// 保存済みの user.id を削除（サインアウト時に使用）
     static func resetCurrentUserID() {
         KeychainHelper.delete(key: userIDKey)
+        // 変更通知は常にメインスレッドで発火（未設定を NSNull で知らせる）
+        if Thread.isMainThread {
+            NotificationCenter.default.post(name: userIDDidChange, object: nil, userInfo: ["userID": NSNull()])
+        } else {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: userIDDidChange, object: nil, userInfo: ["userID": NSNull()])
+            }
+        }
     }
 }
 

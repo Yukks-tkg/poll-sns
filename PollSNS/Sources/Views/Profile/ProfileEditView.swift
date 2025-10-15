@@ -19,7 +19,7 @@ private extension String {
 }
 
 struct ProfileValidation {
-    static let nicknameMin = 1
+    static let nicknameMin = 2
     static let nicknameMax = 20
     static func validateNickname(_ text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -34,23 +34,25 @@ struct ProfileValidation {
 struct ProfileEditView: View {
     let userID: UUID
     let initialProfile: PollAPI.UserProfile?
-    var onSaved: (() -> Void)? = nil
+    var onSaved: ((PollAPI.UserProfile) -> Void)? = nil
 
     @State private var selectedAvatar: String = "👶"
     @State private var nickname: String = ""
-    @State private var gender: Gender = .other
-    @State private var age: Int = 20
+    @State private var gender: Gender? = nil
+    @State private var age: Int? = nil
+    @State private var region: String? = nil
+
     @State private var didPreload = false
-    @State private var region: String = "関東"
+
+    // 初回セットアップ時だけ一度表示するモーダル制御
+    @State private var showIntroModal = false
+    @State private var didShowIntro = false
 
     @Environment(\.dismiss) private var dismiss
 
     private let avatarCandidates: [String] = [
-
         "🐶","🐱","🐼","🦊","🐻","🦁","🐵","🐧","🐸","🦄",
-
         "🍔","🍣","🍕","🍎","🍩","🍜","🍫","☕️",
-
         "👶","👧","🧒"
     ]
 
@@ -64,7 +66,16 @@ struct ProfileEditView: View {
     }
 
     private var canSave: Bool {
-        nicknameError == nil && age >= 13 && age <= 99
+        nicknameError == nil
+        && gender != nil
+        && age != nil
+        && region != nil
+        && (age ?? 0) >= 13
+        && (age ?? 0) <= 99
+    }
+
+    private var isInitialSetup: Bool {
+        return initialProfile == nil
     }
 
     var body: some View {
@@ -92,30 +103,39 @@ struct ProfileEditView: View {
             }
 
             Section(header: Text("ニックネーム"), footer: nicknameFooter) {
-                TextField("1〜20文字（絵文字は不可）", text: $nickname)
+                TextField("2〜20文字（本名・絵文字は不可）", text: $nickname)
                     .textInputAutocapitalization(.none)
                     .autocorrectionDisabled(true)
             }
 
-            Section(header: Text("性別")) {
+            Section(header: Text("性別"), footer: genderFooter) {
                 Picker("性別", selection: $gender) {
+                    Text("未設定").tag(Gender?.none)
                     ForEach(Gender.allCases) { g in
-                        Text(g.display).tag(g)
+                        Text(g.display).tag(Gender?.some(g))
                     }
                 }
                 .pickerStyle(.segmented)
             }
 
-            Section(header: Text("年齢")) {
-                Picker("年齢", selection: $age) {
+            Section(header: Text("年齢"), footer: ageFooter) {
+                Picker("年齢", selection: Binding(
+                    get: { age ?? -1 },
+                    set: { newValue in age = (newValue == -1 ? nil : newValue) }
+                )) {
+                    Text("未設定").tag(-1)
                     ForEach(13...99, id: \.self) { v in
                         Text("\(v)歳").tag(v)
                     }
                 }
             }
 
-            Section(header: Text("地域")) {
-                Picker("地域", selection: $region) {
+            Section(header: Text("地域"), footer: regionFooter) {
+                Picker("地域", selection: Binding(
+                    get: { region ?? "" },
+                    set: { region = $0.isEmpty ? nil : $0 }
+                )) {
+                    Text("未設定").tag("")
                     ForEach(regions, id: \.self) { r in
                         Text(r).tag(r)
                     }
@@ -123,10 +143,12 @@ struct ProfileEditView: View {
             }
         }
         .navigationTitle("プロフィール編集")
-        .navigationBarBackButtonHidden(true)
+        .navigationBarBackButtonHidden(isInitialSetup)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("キャンセル") { dismiss() }
+            if !isInitialSetup {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { dismiss() }
+                }
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存") { save() }
@@ -138,6 +160,39 @@ struct ProfileEditView: View {
                 await preload()
                 didPreload = true
             }
+            // 初回セットアップ時のみ、一度だけモーダルを表示
+            if isInitialSetup && !didShowIntro {
+                showIntroModal = true
+                didShowIntro = true
+            }
+        }
+        .sheet(isPresented: $showIntroModal) {
+            VStack(spacing: 16) {
+                Text("プロフィール設定のお願い")
+                    .font(.title2).bold()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("アンケート結果の正確性を高めるため、プロフィールの内容はできるだけ正確にご入力ください。")
+                    Text("・ニックネーム（本名・絵文字不可）")
+                    Text("・性別")
+                    Text("・年齢（13〜99歳）")
+                    Text("・地域")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundColor(.secondary)
+
+                Spacer(minLength: 8)
+
+                Button {
+                    showIntroModal = false
+                } label: {
+                    Text("はじめる")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
+            .presentationDetents([.fraction(0.45), .medium])
+            .interactiveDismissDisabled(true)
         }
     }
 
@@ -153,19 +208,50 @@ struct ProfileEditView: View {
         .font(.footnote)
     }
 
+    @ViewBuilder
+    private var genderFooter: some View {
+        if gender == nil {
+            Text("性別を選択してください").foregroundColor(.red).font(.footnote)
+        }
+    }
+
+    @ViewBuilder
+    private var ageFooter: some View {
+        if age == nil {
+            Text("年齢を選択してください").foregroundColor(.red).font(.footnote)
+        }
+    }
+
+    @ViewBuilder
+    private var regionFooter: some View {
+        if region == nil {
+            Text("地域を選択してください").foregroundColor(.red).font(.footnote)
+        }
+    }
+
     private func save() {
+        guard let g = gender, let a = age, let r = region else { return }
         let input = PollAPI.ProfileInput(
             display_name: nickname,
-            gender: gender.rawValue,
-            age: age,
+            gender: g.rawValue,
+            age: a,
             icon_emoji: selectedAvatar,
-            region: region
+            region: r
         )
         Task {
             do {
-                _ = try await PollAPI.upsertProfile(userID: userID, input: input)
-                onSaved?()
-                dismiss()
+                let saved = try await PollAPI.upsertProfile(userID: userID, input: input)
+                // 追加: プロフィール更新の通知を送る（ProfileView が自動更新できるように）
+                NotificationCenter.default.post(
+                    name: .profileDidUpdate,
+                    object: nil,
+                    userInfo: [AppNotificationKey.userID: userID]
+                )
+                // UI 更新はメインスレッドで
+                await MainActor.run {
+                    onSaved?(saved)
+                    dismiss()
+                }
             } catch {
                 print("Failed to save profile:", error)
             }
@@ -173,7 +259,6 @@ struct ProfileEditView: View {
     }
 
     private func preload() async {
-
         if let p = initialProfile {
             await MainActor.run { apply(profile: p) }
             return
@@ -182,6 +267,8 @@ struct ProfileEditView: View {
         do {
             if let p = try await PollAPI.fetchProfile(userID: userID) {
                 await MainActor.run { apply(profile: p) }
+            } else {
+                // 既存プロフィールが無い場合は、必須項目は未設定(nil)のまま
             }
         } catch {
             print("EDIT preload error:", error)
@@ -191,9 +278,9 @@ struct ProfileEditView: View {
     private func apply(profile p: PollAPI.UserProfile) {
         if let emoji = p.avatar_value, !emoji.isEmpty { selectedAvatar = emoji }
         nickname = p.username
-        if let a = p.age { age = a }
-        if let g = p.gender, let choice = Gender(rawValue: g) { gender = choice } else { gender = .other }
-        if let r = p.region, !r.isEmpty { region = r }
+        if let a = p.age { age = a } else { age = nil }
+        if let g = p.gender, let choice = Gender(rawValue: g) { gender = choice } else { gender = nil }
+        if let r = p.region, !r.isEmpty { region = r } else { region = nil }
     }
 }
 

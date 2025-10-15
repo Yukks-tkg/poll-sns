@@ -12,6 +12,7 @@ struct PollTimelineView: View {
     @State private var votedSet: Set<UUID> = []
     @State private var myChoiceMap: [UUID: String] = [:]
     @State private var showingNewPoll = false
+    @State private var animateSort = false
 
     private let categoryOptions: [(key: String, label: String)] = [
         ("all", "すべて"),
@@ -114,6 +115,7 @@ struct PollTimelineView: View {
                     }
                 }
                 .listStyle(.plain)
+                .id(sortOrder)
                 .refreshable { await load() }
             }
             .navigationTitle("タイムライン")
@@ -126,8 +128,12 @@ struct PollTimelineView: View {
                     }
                 }
             }
-            .task { await load() }
-            .onReceive(NotificationCenter.default.publisher(for: .pollDidVote)) { _ in
+            .task {
+                if polls.isEmpty {
+                    await load()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .pollDidVote).receive(on: RunLoop.main)) { _ in
                 Task { await reloadTimeline() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .pollDidDelete).receive(on: RunLoop.main)) { note in
@@ -147,6 +153,7 @@ struct PollTimelineView: View {
                 }
             }
             .onChange(of: sortOrder) { _ in
+                animateSort = true
                 Task { await load() }
             }
             .sheet(isPresented: $showingNewPoll, onDismiss: {
@@ -184,17 +191,29 @@ struct PollTimelineView: View {
         }
     }
 
+    // ISO8601（小数秒あり/なし）→ Date 変換ヘルパ
+    private func parseISO8601(_ s: String?) -> Date? {
+        guard let s = s else { return nil }
+        let frac = ISO8601DateFormatter()
+        frac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return frac.date(from: s) ?? plain.date(from: s)
+    }
+
+    @MainActor
     private func load() async {
         do {
             let userID = AppConfig.currentUserID
             let categoryParam = (selectedCategory == "all") ? nil : selectedCategory
-            if sortOrder == "popular" {
-                polls = try await PollAPI.fetchPollsPopular(limit: 20, category: categoryParam)
-            } else {
-                polls = try await PollAPI.fetchPolls(limit: 20,
-                                                     order: "created_at.desc",
-                                                     category: categoryParam)
-            }
+
+            // 1) 一覧は最新で取得（人気はクライアント側で並べ替え）
+            let fetched = try await PollAPI.fetchPolls(limit: 20,
+                                                       order: "created_at.desc",
+                                                       category: categoryParam)
+            polls = fetched
+
+            // 2) 付帯情報（いいね数・自分のいいね・投票状況）を取得
             let ids = polls.map(\.id)
             likeCounts = try await PollAPI.fetchLikeCounts(pollIDs: ids)
             likedSet   = try await PollAPI.fetchUserLiked(pollIDs: ids, userID: userID)
@@ -206,12 +225,32 @@ struct PollTimelineView: View {
                 self.votedSet = []
                 self.myChoiceMap = [:]
             }
+
+            // 3) 人気順をクライアント側で担保（サーバーが順序を返さなくても OK）
+            if sortOrder == "popular" {
+                let sorter: (Poll, Poll) -> Bool = { lhs, rhs in
+                    let lLikes = lhs.like_count ?? likeCounts[lhs.id] ?? 0
+                    let rLikes = rhs.like_count ?? likeCounts[rhs.id] ?? 0
+                    if lLikes != rLikes { return lLikes > rLikes }
+                    let lDate = parseISO8601(lhs.created_at) ?? .distantPast
+                    let rDate = parseISO8601(rhs.created_at) ?? .distantPast
+                    return lDate > rDate
+                }
+                if animateSort {
+                    withAnimation(.easeInOut) { polls.sort(by: sorter) }
+                } else {
+                    polls.sort(by: sorter)
+                }
+                animateSort = false
+            }
+
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
+    @MainActor
     private func toggleLike(for pollID: UUID, isLiked: Bool, current: Int) async {
         if likingNow.contains(pollID) { return }
         likingNow.insert(pollID)
