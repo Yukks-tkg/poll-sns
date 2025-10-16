@@ -240,44 +240,46 @@ struct PollDetailView: View {
                 }
                 .frame(height: 8)
 
-                ZStack {
-                    ScrollView(.horizontal, showsIndicators: true) {
-                        HStack(spacing: 12) {
-                            let denom = total > 0 ? Double(total) : 0
-                            let malePctText   = (denom > 0 ? Double(male)   / denom : 0).formatted(.percent.precision(.fractionLength(0)))
-                            let femalePctText = (denom > 0 ? Double(female) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
-                            let otherPctText  = (denom > 0 ? Double(other)  / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                if total > 0 {
+                    ZStack {
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            HStack(spacing: 12) {
+                                let denom = total > 0 ? Double(total) : 0
+                                let malePctText   = (denom > 0 ? Double(male)   / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let femalePctText = (denom > 0 ? Double(female) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let otherPctText  = (denom > 0 ? Double(other)  / denom : 0).formatted(.percent.precision(.fractionLength(0)))
 
-                            Label("男性 \(malePctText) (\(male)票)", systemImage: "square.fill")
-                                .foregroundStyle(maleColor).font(.caption2)
-                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                            Label("女性 \(femalePctText) (\(female)票)", systemImage: "square.fill")
-                                .foregroundStyle(femaleColor).font(.caption2)
-                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                            Label("その他 \(otherPctText) (\(other)票)", systemImage: "square.fill")
-                                .foregroundStyle(otherColor).font(.caption2)
-                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("男性 \(malePctText) (\(male)票)", systemImage: "square.fill")
+                                    .foregroundStyle(maleColor).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("女性 \(femalePctText) (\(female)票)", systemImage: "square.fill")
+                                    .foregroundStyle(femaleColor).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("その他 \(otherPctText) (\(other)票)", systemImage: "square.fill")
+                                    .foregroundStyle(otherColor).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                            }
+                            .padding(.trailing, 24)
+                            .padding(.bottom, 6)
                         }
-                        .padding(.trailing, 24)
-                        .padding(.bottom, 6)
-                    }
 
-                    LinearGradient(
-                        colors: [Color.clear, Color(.systemBackground)],
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                    .frame(width: 40)
-                    .allowsHitTesting(false)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .padding(.trailing, 8)
+                        LinearGradient(
+                            colors: [Color.clear, Color(.systemBackground)],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                        .frame(width: 40)
                         .allowsHitTesting(false)
                         .frame(maxWidth: .infinity, alignment: .trailing)
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.trailing, 8)
+                            .allowsHitTesting(false)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                    .padding(.top, 2)
                 }
-                .padding(.top, 2)
             }
         }
     }
@@ -329,52 +331,54 @@ struct PollDetailView: View {
                 }
                 .frame(height: 8)
 
-                ZStack {
-                    ScrollView(.horizontal, showsIndicators: true) {
-                        HStack(spacing: 12) {
-                            let denom = total > 0 ? Double(total) : 0
-                            let p10 = (denom > 0 ? Double(teens) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
-                            let p20 = (denom > 0 ? Double(twenties) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
-                            let p30 = (denom > 0 ? Double(thirties) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
-                            let p40 = (denom > 0 ? Double(forties) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
-                            let p50 = (denom > 0 ? Double(fiftiesPlus) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                if total > 0 {
+                    ZStack {
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            HStack(spacing: 12) {
+                                let denom = total > 0 ? Double(total) : 0
+                                let p10 = (denom > 0 ? Double(teens) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let p20 = (denom > 0 ? Double(twenties) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let p30 = (denom > 0 ? Double(thirties) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let p40 = (denom > 0 ? Double(forties) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let p50 = (denom > 0 ? Double(fiftiesPlus) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
 
-                            Label("10代 \(p10) (\(teens)票)", systemImage: "square.fill")
-                                .foregroundStyle(c10).font(.caption2)
-                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                            Label("20代 \(p20) (\(twenties)票)", systemImage: "square.fill")
-                                .foregroundStyle(c20).font(.caption2)
-                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                            Label("30代 \(p30) (\(thirties)票)", systemImage: "square.fill")
-                                .foregroundStyle(c30).font(.caption2)
-                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                            Label("40代 \(p40) (\(forties)票)", systemImage: "square.fill")
-                                .foregroundStyle(c40).font(.caption2)
-                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                            Label("50代以上 \(p50) (\(fiftiesPlus)票)", systemImage: "square.fill")
-                                .foregroundStyle(c50).font(.caption2)
-                                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("10代 \(p10) (\(teens)票)", systemImage: "square.fill")
+                                    .foregroundStyle(c10).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("20代 \(p20) (\(twenties)票)", systemImage: "square.fill")
+                                    .foregroundStyle(c20).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("30代 \(p30) (\(thirties)票)", systemImage: "square.fill")
+                                    .foregroundStyle(c30).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("40代 \(p40) (\(forties)票)", systemImage: "square.fill")
+                                    .foregroundStyle(c40).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("50代以上 \(p50) (\(fiftiesPlus)票)", systemImage: "square.fill")
+                                    .foregroundStyle(c50).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                            }
+                            .padding(.trailing, 24)
+                            .padding(.bottom, 6)
                         }
-                        .padding(.trailing, 24)
-                        .padding(.bottom, 6)
-                    }
 
-                    LinearGradient(
-                        colors: [Color.clear, Color(.systemBackground)],
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                    .frame(width: 40)
-                    .allowsHitTesting(false)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .padding(.trailing, 8)
+                        LinearGradient(
+                            colors: [Color.clear, Color(.systemBackground)],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                        .frame(width: 40)
                         .allowsHitTesting(false)
                         .frame(maxWidth: .infinity, alignment: .trailing)
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.trailing, 8)
+                            .allowsHitTesting(false)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                    .padding(.top, 2)
                 }
-                .padding(.top, 2)
             }
         }
     }

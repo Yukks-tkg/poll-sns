@@ -13,8 +13,12 @@ struct RootTabView: View {
     // 初回プロフィール強制表示フラグ
     @State private var mustSetupProfile: Bool = false
     @State private var isCheckingProfile = false
+
+    // 開発用サインアウトUI/状態は DEBUG のみ
+    #if DEBUG
     @State private var signingOut = false
     @State private var showSignedOutToast = false
+    #endif
 
     // グローバル設定シートの表示フラグ
     @State private var showSettings: Bool = false
@@ -45,7 +49,8 @@ struct RootTabView: View {
                 NavigationStack {
                     ProfileView()
                         .toolbar {
-                            // 開発用：サインアウト
+                            #if DEBUG
+                            // 開発用：サインアウト（リリースでは非表示）
                             ToolbarItem(placement: .navigationBarTrailing) {
                                 Button {
                                     Task { await signOutAndReauth() }
@@ -59,6 +64,7 @@ struct RootTabView: View {
                                 .accessibilityLabel("サインアウト（開発用）")
                                 .disabled(signingOut)
                             }
+                            #endif
                         }
                 }
                 .tabItem {
@@ -67,6 +73,7 @@ struct RootTabView: View {
                 .tag(Tab.profile)
             }
 
+            #if DEBUG
             // サインアウト中はブラー系マテリアルで全画面オーバーレイ
             if signingOut {
                 Rectangle()
@@ -111,6 +118,7 @@ struct RootTabView: View {
                 .animation(.easeInOut(duration: 0.2), value: showSignedOutToast)
                 .allowsHitTesting(false)
             }
+            #endif
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToTimeline)) { _ in
             selected = .timeline
@@ -184,7 +192,8 @@ struct RootTabView: View {
         }
     }
 
-    // MARK: - Sign-out flow (開発用)
+    // MARK: - Sign-out flow (開発用: DEBUG のみ)
+    #if DEBUG
     private func signOutAndReauth() async {
         // 1) 先にオーバーレイを被せてから、アニメーション無しでタイムラインへ切替
         await MainActor.run {
@@ -237,5 +246,5 @@ struct RootTabView: View {
             withAnimation { showSignedOutToast = false }
         }
     }
+    #endif
 }
-
