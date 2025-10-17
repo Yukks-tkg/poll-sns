@@ -201,17 +201,20 @@ struct PollDetailView: View {
         }
     }
 
+    // 性別用の積み上げバー（無回答追加）
     private struct ResultBarStacked: View {
         let label: String
         let male: Int
         let female: Int
         let other: Int
+        let no_answer: Int
         let grandTotal: Int
-        var total: Int { male + female + other }
+        var total: Int { male + female + other + no_answer }
 
         private let maleColor = Color.blue
         private let femaleColor = Color.pink
         private let otherColor = Color.purple
+        private let noAnswerColor = Color.gray
 
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
@@ -229,12 +232,14 @@ struct PollDetailView: View {
                     let mW = total > 0 ? w * CGFloat(male) / CGFloat(total) : 0
                     let fW = total > 0 ? w * CGFloat(female) / CGFloat(total) : 0
                     let oW = total > 0 ? w * CGFloat(other) / CGFloat(total) : 0
+                    let nW = total > 0 ? w * CGFloat(no_answer) / CGFloat(total) : 0
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color(.systemGray5))
                         HStack(spacing: 0) {
                             Capsule().fill(maleColor).frame(width: mW)
                             Capsule().fill(femaleColor).frame(width: fW)
                             Capsule().fill(otherColor).frame(width: oW)
+                            Capsule().fill(noAnswerColor).frame(width: nW)
                         }
                     }
                 }
@@ -245,9 +250,10 @@ struct PollDetailView: View {
                         ScrollView(.horizontal, showsIndicators: true) {
                             HStack(spacing: 12) {
                                 let denom = total > 0 ? Double(total) : 0
-                                let malePctText   = (denom > 0 ? Double(male)   / denom : 0).formatted(.percent.precision(.fractionLength(0)))
-                                let femalePctText = (denom > 0 ? Double(female) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
-                                let otherPctText  = (denom > 0 ? Double(other)  / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let malePctText   = (denom > 0 ? Double(male)      / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let femalePctText = (denom > 0 ? Double(female)    / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let otherPctText  = (denom > 0 ? Double(other)     / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let noAnsPctText  = (denom > 0 ? Double(no_answer) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
 
                                 Label("男性 \(malePctText) (\(male)票)", systemImage: "square.fill")
                                     .foregroundStyle(maleColor).font(.caption2)
@@ -257,6 +263,9 @@ struct PollDetailView: View {
                                     .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                                 Label("その他 \(otherPctText) (\(other)票)", systemImage: "square.fill")
                                     .foregroundStyle(otherColor).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("無回答 \(noAnsPctText) (\(no_answer)票)", systemImage: "square.fill")
+                                    .foregroundStyle(noAnswerColor).font(.caption2)
                                     .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                             }
                             .padding(.trailing, 24)
@@ -383,7 +392,7 @@ struct PollDetailView: View {
         }
     }
 
-    // 地域用の積み上げバー＋凡例
+    // 地域用の積み上げバー＋凡例（無回答付き）
     private struct ResultBarStackedRegion: View {
         let label: String
         let hokkaido: Int
@@ -796,6 +805,7 @@ struct PollDetailView: View {
                         male: gb?.male ?? 0,
                         female: gb?.female ?? 0,
                         other: gb?.other ?? 0,
+                        no_answer: gb?.no_answer ?? 0,
                         grandTotal: totalVotes
                     )
                 }

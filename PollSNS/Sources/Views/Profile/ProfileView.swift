@@ -186,6 +186,11 @@ struct ProfileView: View {
             details.append("\(age)歳")
         }
 
+        // 追加: 年代（age_group）を表示
+        if let ag = profile.age_group, !ag.isEmpty {
+            details.append(ag)
+        }
+
         if let r = profile.region, !r.isEmpty {
             details.append(r)
         }
@@ -198,6 +203,7 @@ struct ProfileView: View {
         case "male": return "男性"
         case "female": return "女性"
         case "other": return "その他"
+        case "no_answer": return "無回答"
         case "prefer_not_to_say": return "回答しない"
         default:
             return code

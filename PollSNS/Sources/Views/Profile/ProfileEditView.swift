@@ -1,13 +1,14 @@
 import SwiftUI
 
 enum Gender: String, CaseIterable, Identifiable {
-    case male, female, other
+    case male, female, other, no_answer
     var id: String { rawValue }
     var display: String {
         switch self {
         case .male: return "男性"
         case .female: return "女性"
         case .other: return "その他"
+        case .no_answer: return "無回答"
         }
     }
 }
@@ -41,6 +42,7 @@ struct ProfileEditView: View {
     @State private var gender: Gender? = nil
     @State private var age: Int? = nil
     @State private var region: String? = nil
+    @State private var ageGroup: String? = nil   // 追加: 年代（"10代" 等）
 
     @State private var didPreload = false
 
@@ -62,6 +64,11 @@ struct ProfileEditView: View {
         "中国", "四国", "九州・沖縄", "海外", "無回答"
     ]
 
+    // 年代の選択肢（無回答含む）
+    private let ageGroups = [
+        "10代", "20代", "30代", "40代", "50代以上", "無回答"
+    ]
+
     private var nicknameError: String? {
         ProfileValidation.validateNickname(nickname)
     }
@@ -71,6 +78,7 @@ struct ProfileEditView: View {
         && gender != nil
         && age != nil
         && region != nil
+        && ageGroup != nil
         && (age ?? 0) >= 13
         && (age ?? 0) <= 99
     }
@@ -142,6 +150,19 @@ struct ProfileEditView: View {
                     }
                 }
             }
+
+            // 追加: 年代（地域と同じ構成）
+            Section(header: Text("年代"), footer: ageGroupFooter) {
+                Picker("年代", selection: Binding(
+                    get: { ageGroup ?? "" },
+                    set: { ageGroup = $0.isEmpty ? nil : $0 }
+                )) {
+                    Text("未設定").tag("")
+                    ForEach(ageGroups, id: \.self) { g in
+                        Text(g).tag(g)
+                    }
+                }
+            }
         }
         .navigationTitle("プロフィール編集")
         .navigationBarBackButtonHidden(isInitialSetup)
@@ -177,6 +198,7 @@ struct ProfileEditView: View {
                     Text("・性別")
                     Text("・年齢（13〜99歳）")
                     Text("・地域")
+                    Text("・年代")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundColor(.secondary)
@@ -230,14 +252,22 @@ struct ProfileEditView: View {
         }
     }
 
+    @ViewBuilder
+    private var ageGroupFooter: some View {
+        if ageGroup == nil {
+            Text("年代を選択してください").foregroundColor(.red).font(.footnote)
+        }
+    }
+
     private func save() {
-        guard let g = gender, let a = age, let r = region else { return }
+        guard let g = gender, let a = age, let r = region, let ag = ageGroup else { return }
         let input = PollAPI.ProfileInput(
             display_name: nickname,
             gender: g.rawValue,
             age: a,
             icon_emoji: selectedAvatar,
-            region: r
+            region: r,
+            age_group: ag
         )
         Task {
             do {
@@ -282,6 +312,7 @@ struct ProfileEditView: View {
         if let a = p.age { age = a } else { age = nil }
         if let g = p.gender, let choice = Gender(rawValue: g) { gender = choice } else { gender = nil }
         if let r = p.region, !r.isEmpty { region = r } else { region = nil }
+        if let ag = p.age_group, !ag.isEmpty { ageGroup = ag } else { ageGroup = nil }
     }
 }
 

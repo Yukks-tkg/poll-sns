@@ -46,7 +46,8 @@ enum PollAPI {
         let avatar_type: String?
         let avatar_value: String?
         let avatar_color: String?
-        let region: String?          // ← 追加
+        let region: String?          // ← 地域
+        let age_group: String?       // ← 追加: 年代（"10代","20代","30代","40代","50代以上","無回答" 等）
         let updated_at: Date?
         let created_at: Date?
     }
@@ -132,6 +133,7 @@ enum PollAPI {
         var age: Int?
         var icon_emoji: String?
         var region: String?
+        var age_group: String?   // ← 追加
     }
 
     /// 指定ユーザーのプロフィールを 1 件取得（無ければ nil）
@@ -141,7 +143,7 @@ enum PollAPI {
         comps.path = "/rest/v1/profiles"
         comps.queryItems = [
             URLQueryItem(name: "user_id", value: "eq.\(userID.uuidString.lowercased())"),
-            URLQueryItem(name: "select", value: "user_id,username,gender,age,country_code,avatar_type,avatar_value,avatar_color,region,created_at"),
+            URLQueryItem(name: "select", value: "user_id,username,gender,age,country_code,avatar_type,avatar_value,avatar_color,region,age_group,created_at"),
             URLQueryItem(name: "limit", value: "1")
         ]
         let url = comps.url!
@@ -217,10 +219,11 @@ enum PollAPI {
         if let v = input.icon_emoji { body["avatar_value"] = v }
         if let v = input.age { body["age"] = v }
         // gender を保存（DB 側のチェック制約に合わせて許可値のみ）
-        if let v = input.gender, ["male","female","other"].contains(v) {
+        if let v = input.gender, ["male","female","other","no_answer"].contains(v) {
             body["gender"] = v
         }
         if let v = input.region { body["region"] = v }
+        if let v = input.age_group { body["age_group"] = v }
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -280,18 +283,19 @@ enum PollAPI {
 
     // MARK: - Results (client-side aggregation)
 
-    // Gender breakdown per option (male/female/other) with optional age range filter
+    // Gender breakdown per option (male/female/other/no_answer)
     struct GenderBreakdown: Identifiable {
         let option_id: UUID
         var male: Int
         var female: Int
         var other: Int
-        var total: Int { male + female + other }
+        var no_answer: Int
+        var total: Int { male + female + other + no_answer }
         var id: UUID { option_id }
     }
 
-    /// 各選択肢ごとの性別内訳（male/female/other）を取得します。
-    /// 年齢フィルタ（ageMin/ageMax）が指定された場合は、該当年齢の投票のみを集計します。
+    /// 各選択肢ごとの性別内訳（male/female/other/no_answer）を取得します。
+    /// 年齢フィルタ（ageMin/ageMax）は現状 RPC 側非対応のため未使用（将来拡張）。
     static func fetchGenderBreakdown(for pollID: UUID, ageMin: Int? = nil, ageMax: Int? = nil) async throws -> [GenderBreakdown] {
         // RPC: fetch_gender_breakdown(_poll_id uuid)
         guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
@@ -311,10 +315,46 @@ enum PollAPI {
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
         guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
 
-        struct Row: Decodable { let option_id: UUID; let male: Int; let female: Int; let other: Int }
-        let rows = try JSONDecoder().decode([Row].self, from: data)
-        return rows.map { r in
-            GenderBreakdown(option_id: r.option_id, male: r.male, female: r.female, other: r.other)
+        // 1) 新RPC（横持ち, snake_case）: no_answer を含む
+        struct RowV2: Decodable { let option_id: UUID; let male: Int?; let female: Int?; let other: Int?; let no_answer: Int? }
+        if let rows = try? JSONDecoder().decode([RowV2].self, from: data) {
+            return rows.map { r in
+                GenderBreakdown(option_id: r.option_id,
+                                male: r.male ?? 0,
+                                female: r.female ?? 0,
+                                other: r.other ?? 0,
+                                no_answer: r.no_answer ?? 0)
+            }
+        }
+
+        // 2) camelCase 対応 + NULL 対応の緩いデコード（noAnswer 含む）
+        struct LooseRow: Decodable {
+            let optionId: UUID
+            let male: Int?
+            let female: Int?
+            let other: Int?
+            let noAnswer: Int?
+        }
+        do {
+            let dec = JSONDecoder()
+            dec.keyDecodingStrategy = .convertFromSnakeCase
+            let rows = try dec.decode([LooseRow].self, from: data)
+            return rows.map { r in
+                GenderBreakdown(option_id: r.optionId,
+                                male: r.male ?? 0,
+                                female: r.female ?? 0,
+                                other: r.other ?? 0,
+                                no_answer: r.noAnswer ?? 0)
+            }
+        } catch {
+            // 続行（旧形式フォールバックへ）
+        }
+
+        // 3) 旧RPC（male/female/other のみ）: no_answer は 0 で補完
+        struct RowV1: Decodable { let option_id: UUID; let male: Int; let female: Int; let other: Int }
+        let v1 = try JSONDecoder().decode([RowV1].self, from: data)
+        return v1.map { r in
+            GenderBreakdown(option_id: r.option_id, male: r.male, female: r.female, other: r.other, no_answer: 0)
         }
     }
 
@@ -629,6 +669,7 @@ enum PollAPI {
         ]
 
         let url = comps.url!
+
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
         addSupabaseHeaders(to: &req)
@@ -656,7 +697,7 @@ enum PollAPI {
         guard !pollIDs.isEmpty else { return [] }
         guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
-        comps.path = "/rest/v1/votes"
+        comps.path = "/rest/v1/likes"
         // poll_id in (...) & user_id = ...
         let idsString = pollIDs.map { $0.uuidString.uppercased() }.joined(separator: ",")
         comps.queryItems = [
@@ -1305,3 +1346,4 @@ enum PollAPI {
         return try JSONDecoder().decode([Poll].self, from: data)
     }
 }
+
