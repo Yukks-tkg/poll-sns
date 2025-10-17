@@ -395,9 +395,10 @@ struct PollDetailView: View {
         let shikoku: Int
         let kyushu_okinawa: Int
         let overseas: Int
+        let no_answer: Int
         let grandTotal: Int
 
-        var total: Int { hokkaido + tohoku + kanto + chubu + kinki + chugoku + shikoku + kyushu_okinawa + overseas }
+        var total: Int { hokkaido + tohoku + kanto + chubu + kinki + chugoku + shikoku + kyushu_okinawa + overseas + no_answer }
 
         // 任意の配色（被らないよう視認性重視）
         private let cHokkaido = Color.mint
@@ -409,6 +410,7 @@ struct PollDetailView: View {
         private let cShikoku = Color.cyan
         private let cKyushu = Color.pink
         private let cOverseas = Color.purple
+        private let cNoAnswer = Color.gray
 
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
@@ -438,6 +440,7 @@ struct PollDetailView: View {
                             Capsule().fill(cShikoku).frame(width: seg(shikoku))
                             Capsule().fill(cKyushu).frame(width: seg(kyushu_okinawa))
                             Capsule().fill(cOverseas).frame(width: seg(overseas))
+                            Capsule().fill(cNoAnswer).frame(width: seg(no_answer))
                         }
                     }
                 }
@@ -477,6 +480,9 @@ struct PollDetailView: View {
                                     .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                                 Label("海外 \(pct(overseas)) (\(overseas)票)", systemImage: "square.fill")
                                     .foregroundStyle(cOverseas).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("無回答 \(pct(no_answer)) (\(no_answer)票)", systemImage: "square.fill")
+                                    .foregroundStyle(cNoAnswer).font(.caption2)
                                     .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                             }
                             .padding(.trailing, 24)
@@ -765,6 +771,7 @@ struct PollDetailView: View {
                         shikoku: rb?.shikoku ?? 0,
                         kyushu_okinawa: rb?.kyushu_okinawa ?? 0,
                         overseas: rb?.overseas ?? 0,
+                        no_answer: rb?.no_answer ?? 0,
                         grandTotal: totalVotes
                     )
                 }
@@ -1142,7 +1149,8 @@ struct PollDetailView: View {
                     dict[opt.id] = PollAPI.RegionBreakdown(
                         option_id: opt.id,
                         hokkaido: 0, tohoku: 0, kanto: 0, chubu: 0,
-                        kinki: 0, chugoku: 0, shikoku: 0, kyushu_okinawa: 0, overseas: 0
+                        kinki: 0, chugoku: 0, shikoku: 0, kyushu_okinawa: 0, overseas: 0,
+                        no_answer: 0
                     )
                 }
             }

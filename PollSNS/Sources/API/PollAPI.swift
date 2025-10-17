@@ -371,7 +371,7 @@ enum PollAPI {
         }
     }
 
-    // Region breakdown per option (北海道/東北/関東/中部/近畿/中国/四国/九州・沖縄/海外)
+    // Region breakdown per option (北海道/東北/関東/中部/近畿/中国/四国/九州・沖縄/海外/無回答)
     struct RegionBreakdown: Codable, Identifiable {
         let option_id: UUID
         var hokkaido: Int
@@ -383,14 +383,15 @@ enum PollAPI {
         var shikoku: Int
         var kyushu_okinawa: Int
         var overseas: Int
-        var total: Int { hokkaido + tohoku + kanto + chubu + kinki + chugoku + shikoku + kyushu_okinawa + overseas }
+        var no_answer: Int
+        var total: Int { hokkaido + tohoku + kanto + chubu + kinki + chugoku + shikoku + kyushu_okinawa + overseas + no_answer }
         var id: UUID { option_id }
     }
 
-    /// 各選択肢ごとの地域内訳（北海道/東北/関東/中部/近畿/中国/四国/九州・沖縄/海外）を取得します。
+    /// 各選択肢ごとの地域内訳（北海道/東北/関東/中部/近畿/中国/四国/九州・沖縄/海外/無回答）を取得します。
     /// RPC `fetch_region_breakdown(_poll_id uuid)` は
     /// (option_id uuid, hokkaido int, tohoku int, kanto int, chubu int, kinki int,
-    ///  chugoku int, shikoku int, kyushu_okinawa int, overseas int)
+    ///  chugoku int, shikoku int, kyushu_okinawa int, overseas int, no_answer int)
     /// の **横持ち** 形式を返すため、そのまま `RegionBreakdown` としてデコードします。
     /// 互換性のため、旧形式（region/votes の縦持ち）もフォールバックで対応します。
     static func fetchRegionBreakdown(for pollID: UUID) async throws -> [RegionBreakdown] {
@@ -411,21 +412,62 @@ enum PollAPI {
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
         guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
 
-        let dec = JSONDecoder()
-
-        // 新RPC（横持ち）: そのまま RegionBreakdown としてデコード
-        if let list = try? dec.decode([RegionBreakdown].self, from: data) {
+        // 1) 新RPC（横持ち, snake_case）: そのまま RegionBreakdown としてデコード
+        do {
+            let list = try JSONDecoder().decode([RegionBreakdown].self, from: data)
             return list
+        } catch {
+            // 続行（フォールバックへ）
         }
 
-        // 旧RPC（縦持ち）: option_id / region / votes を集約して RegionBreakdown に作り直す
+        // 2) 横持ちだけど camelCase or NULL が混じる場合の寛容デコード
+        //    - keyDecodingStrategy = .convertFromSnakeCase を使い、
+        //      プロパティは camelCase（optionId, kyushuOkinawa, noAnswer 等）で定義
+        //    - Int? で受けて nil は 0 に丸める
+        struct LooseRow: Decodable {
+            let optionId: UUID
+            let hokkaido: Int?
+            let tohoku: Int?
+            let kanto: Int?
+            let chubu: Int?
+            let kinki: Int?
+            let chugoku: Int?
+            let shikoku: Int?
+            let kyushuOkinawa: Int?   // kyushu_okinawa / kyushuOkinawa 両対応
+            let overseas: Int?
+            let noAnswer: Int?
+        }
+        do {
+            let dec = JSONDecoder()
+            dec.keyDecodingStrategy = .convertFromSnakeCase
+            let rows = try dec.decode([LooseRow].self, from: data)
+            return rows.map { r in
+                RegionBreakdown(
+                    option_id: r.optionId,
+                    hokkaido: r.hokkaido ?? 0,
+                    tohoku: r.tohoku ?? 0,
+                    kanto: r.kanto ?? 0,
+                    chubu: r.chubu ?? 0,
+                    kinki: r.kinki ?? 0,
+                    chugoku: r.chugoku ?? 0,
+                    shikoku: r.shikoku ?? 0,
+                    kyushu_okinawa: r.kyushuOkinawa ?? 0,
+                    overseas: r.overseas ?? 0,
+                    no_answer: r.noAnswer ?? 0
+                )
+            }
+        } catch {
+            // 続行（旧形式フォールバックへ）
+        }
+
+        // 3) 旧RPC（縦持ち）: option_id / region / votes を集約して RegionBreakdown に作り直す
         struct OldRow: Decodable { let option_id: UUID; let region: String; let votes: Int }
-        let rows = try dec.decode([OldRow].self, from: data)
+        let rows = try JSONDecoder().decode([OldRow].self, from: data)
         var map: [UUID: RegionBreakdown] = [:]
         func empty(_ id: UUID) -> RegionBreakdown {
             RegionBreakdown(option_id: id,
                             hokkaido: 0, tohoku: 0, kanto: 0, chubu: 0, kinki: 0,
-                            chugoku: 0, shikoku: 0, kyushu_okinawa: 0, overseas: 0)
+                            chugoku: 0, shikoku: 0, kyushu_okinawa: 0, overseas: 0, no_answer: 0)
         }
         for r in rows {
             var agg = map[r.option_id] ?? empty(r.option_id)
@@ -437,8 +479,9 @@ enum PollAPI {
             case "近畿", "関西", "kinki": agg.kinki = r.votes
             case "中国", "chugoku": agg.chugoku = r.votes
             case "四国", "shikoku": agg.shikoku = r.votes
-            case "九州・沖縄", "九州沖縄", "kyushu_okinawa": agg.kyushu_okinawa = r.votes
+            case "九州・沖縄", "九州沖縄", "kyushu_okinawa", "kyushuOkinawa": agg.kyushu_okinawa = r.votes
             case "海外", "overseas": agg.overseas = r.votes
+            case "無回答", "no_answer", "noAnswer", "unknown", "null": agg.no_answer = r.votes
             default: break
             }
             map[r.option_id] = agg
