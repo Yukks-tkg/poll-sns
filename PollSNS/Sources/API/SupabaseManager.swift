@@ -9,8 +9,17 @@ final class SupabaseManager {
     private init() {
         client = SupabaseClient(
             supabaseURL: URL(string: AppConfig.supabaseURL)!,
-            supabaseKey: AppConfig.supabaseAnonKey
+            supabaseKey: AppConfig.supabaseAnonKey,
+            options: .init(
+                auth: .init(autoRefreshToken: true)
+            )
         )
+    }
+
+    // 起動直後に必ず匿名サインインを待つ（既にログイン済みなら何もしない）
+    func ensureSignedIn() async throws {
+        if client.auth.currentUser != nil { return }
+        _ = try await client.auth.signInAnonymously()
     }
 
     // 匿名ログイン

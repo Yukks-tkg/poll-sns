@@ -178,19 +178,13 @@ struct ProfileView: View {
         guard let profile = profile else { return "" }
         var details: [String] = []
 
+        // 並び順: 性別 → 年代 → 地域（年齢の表示は廃止）
         if let g = profile.gender, !g.isEmpty {
             details.append(genderLabel(for: g))
         }
-
-        if let age = profile.age {
-            details.append("\(age)歳")
-        }
-
-        // 追加: 年代（age_group）を表示
         if let ag = profile.age_group, !ag.isEmpty {
             details.append(ag)
         }
-
         if let r = profile.region, !r.isEmpty {
             details.append(r)
         }
@@ -232,7 +226,7 @@ struct ProfileView: View {
                 self.didFetchOnce = true
             }
             if let p = result {
-                print("PROFILE: fetch ok username=\(p.username) age=\(p.age?.description ?? "nil")")
+                print("PROFILE: fetch ok username=\(p.username)")
             } else {
                 print("PROFILE: fetch ok but no profile row for user")
             }

@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 // MARK: - Shared JSON decoder (ISO8601 dates; allow fractional seconds)
 extension JSONDecoder {
@@ -28,7 +29,19 @@ extension JSONDecoder {
     }
 }
 
+// 詳細な HTTP エラー（本文も含めて UI に出せるようにする）
+struct HTTPError: LocalizedError {
+    let statusCode: Int
+    let body: String
+    var errorDescription: String? {
+        "HTTP \(statusCode): \(body)"
+    }
+}
+
 enum PollAPI {
+    // 共通ロガー（DEBUG ビルドのみ詳細ログを出す）
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "PollApp", category: "PollAPI")
+
     // MARK: - Supabase Headers Helper
     /// Adds required Supabase headers to a URLRequest (Accept, apikey, Authorization).
     private static func addSupabaseHeaders(to req: inout URLRequest) {
@@ -41,17 +54,29 @@ enum PollAPI {
         let user_id: UUID
         let username: String
         let gender: String?
-        let age: Int?
-        let country_code: String?
-        let avatar_type: String?
-        let avatar_value: String?
-        let avatar_color: String?
-        let region: String?          // ← 地域
-        let age_group: String?       // ← 追加: 年代（"10代","20代","30代","40代","50代以上","無回答" 等）
+        let age: Int?                 // 廃止予定（後方互換のため残置。fetchProfile では取得しないため通常は nil）
+        let avatar_value: String?     // ← 絵文字など
+        let region: String?           // ← 地域
+        let age_group: String?        // ← 年代（"10代","20代","30代","40代","50代以上","無回答" 等）
         let updated_at: Date?
         let created_at: Date?
     }
 
+    // 追加: RPC 経由で profiles 行を「必ず用意して返す」API（JWT 付与で RLS も通る想定）
+    // ensure_profile_exists: () -> profiles row を返す Edge Function/RPC を想定
+    static func ensureProfileExists() async throws -> UserProfile {
+        let response = try await SupabaseManager.shared.client
+            .rpc("ensure_profile_exists")
+            .execute()
+        // RPC が1行の profiles レコードを返す前提（単一オブジェクト or 配列の両方に対応）
+        let dec = JSONDecoder.iso8601
+        if let single = try? dec.decode(UserProfile.self, from: response.data) {
+            return single
+        }
+        let rows = try dec.decode([UserProfile].self, from: response.data)
+        guard let first = rows.first else { throw URLError(.cannotParseResponse) }
+        return first
+    }
 
     // MARK: - Reports (reason enum)
     enum ReportReason: String, CaseIterable {
@@ -74,7 +99,6 @@ enum PollAPI {
         var minAge: Int? = nil
         var maxAge: Int? = nil
         var ageBucketWidth: Int = 7              // 5/7/10
-        var countryCode: String? = nil           // e.g., "JP"
         var gender: String? = nil              // "male" | "female" | "other" | nil(=all)
 
         func toRPCBody(pollID: UUID) -> [String: Any] {
@@ -84,7 +108,6 @@ enum PollAPI {
             ]
             if let v = minAge { body["p_min_age"] = v }
             if let v = maxAge { body["p_max_age"] = v }
-            if let v = countryCode { body["p_country_code"] = v }
             if let v = gender { body["p_gender"] = v }
             return body
         }
@@ -130,10 +153,10 @@ enum PollAPI {
     struct ProfileInput: Encodable {
         var display_name: String?
         var gender: String?
-        var age: Int?
+        // age は送信廃止（後方互換のためプロパティ自体を削除）
         var icon_emoji: String?
         var region: String?
-        var age_group: String?   // ← 追加
+        var age_group: String?   // ← 年代
     }
 
     /// 指定ユーザーのプロフィールを 1 件取得（無ければ nil）
@@ -143,7 +166,8 @@ enum PollAPI {
         comps.path = "/rest/v1/profiles"
         comps.queryItems = [
             URLQueryItem(name: "user_id", value: "eq.\(userID.uuidString.lowercased())"),
-            URLQueryItem(name: "select", value: "user_id,username,gender,age,country_code,avatar_type,avatar_value,avatar_color,region,age_group,created_at"),
+            // age は取得しない（UserProfile.age は残置だが通常 nil）
+            URLQueryItem(name: "select", value: "user_id,username,gender,avatar_value,region,age_group,created_at"),
             URLQueryItem(name: "limit", value: "1")
         ]
         let url = comps.url!
@@ -154,6 +178,8 @@ enum PollAPI {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        // 一時的なデバッグログ（原因切り分け用）
+        print("ℹ️ fetchProfile code=\(code) body=\(String(data: data, encoding: .utf8) ?? "")")
         guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
 
         // profiles は配列で返る（0件のときは []）
@@ -187,10 +213,12 @@ enum PollAPI {
         let body: [String: Any] = ["id": userID.uuidString.uppercased()]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, resp) = try await URLSession.shared.data(for: req)
+        let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
         if !(200...299).contains(code) {
-            throw URLError(.badServerResponse)
+            let bodyStr = String(data: data, encoding: .utf8) ?? ""
+            print("❌ ensureUserExists failed. code=\(code) body=\(bodyStr)")
+            throw HTTPError(statusCode: code, body: bodyStr)
         }
     }
 
@@ -199,46 +227,42 @@ enum PollAPI {
     static func upsertProfile(userID: UUID, input: ProfileInput) async throws -> UserProfile {
         guard let base = URL(string: AppConfig.supabaseURL) else { throw URLError(.badURL) }
 
-        // 先に users テーブルに自分の ID を作成（外部キー制約対策）
+        // 外部キーのため users を事前作成
         try await ensureUserExists(userID: userID)
 
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
         comps.path = "/rest/v1/profiles"
-        // プロフィールは user_id を一意キーとして Upsert する
-        comps.queryItems = [
-            URLQueryItem(name: "on_conflict", value: "user_id")
-        ]
+        comps.queryItems = [ URLQueryItem(name: "on_conflict", value: "user_id") ]
         let url = comps.url!
 
-        // DBスキーマに合わせてキー名を変換する
-        // - display_name  -> username
-        // - icon_emoji    -> avatar_value
-        // - country_code  は ProfileInput に無いので送らない（後で必要なら引数追加）
         var body: [String: Any] = ["user_id": userID.uuidString.uppercased()]
         if let v = input.display_name { body["username"] = v }
-        if let v = input.icon_emoji { body["avatar_value"] = v }
-        if let v = input.age { body["age"] = v }
-        // gender を保存（DB 側のチェック制約に合わせて許可値のみ）
-        if let v = input.gender, ["male","female","other","no_answer"].contains(v) {
-            body["gender"] = v
-        }
-        if let v = input.region { body["region"] = v }
-        if let v = input.age_group { body["age_group"] = v }
+        if let v = input.icon_emoji  { body["avatar_value"] = v }
+        if let v = input.gender, ["male","female","other","no_answer"].contains(v) { body["gender"] = v }
+        if let v = input.region     { body["region"] = v }
+        if let v = input.age_group  { body["age_group"] = v }
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         addSupabaseHeaders(to: &req)
-        // 重複時はマージし、反映後の行を返す
-        req.setValue("resolution=merge-duplicates,return=representation", forHTTPHeaderField: "Prefer")
+
+        // 本文返却をやめる（保存だけ成功すればOK）
+        req.setValue("resolution=merge-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
-        let rows = try JSONDecoder.iso8601.decode([UserProfile].self, from: data)
-        guard let profile = rows.first else { throw URLError(.cannotParseResponse) }
-        return profile
+        if !(200...299).contains(code) {
+            print("❌ upsertProfile failed. code=\(code), body=\(String(data: data, encoding: .utf8) ?? "")")
+            throw URLError(.badServerResponse)
+        }
+
+        // 保存後に GET で取り直す（ここで SELECT ポリシーが使われる）
+        guard let prof = try await fetchProfile(userID: userID) else {
+            throw URLError(.cannotParseResponse)
+        }
+        return prof
     }
 
     // 最小プロフィール（自動作成用）
@@ -268,9 +292,13 @@ enum PollAPI {
         let payload = [MinimalProfile(user_id: userID, username: nil, created_at: Date())]
         req.httpBody = try JSONEncoder().encode(payload)
 
-        let (_, resp) = try await URLSession.shared.data(for: req)
+        let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
+        if !(200...299).contains(code) {
+            let bodyStr = String(data: data, encoding: .utf8) ?? ""
+            print("❌ ensureProfileExists(profiles) failed. code=\(code) body=\(bodyStr)")
+            throw HTTPError(statusCode: code, body: bodyStr)
+        }
     }
 
 
@@ -358,7 +386,7 @@ enum PollAPI {
         }
     }
 
-    // Age breakdown per option (10代/20代/30代/40代/50代以上)
+    // Age breakdown per option (10代/20代/30代/40代/50代以上/無回答)
     struct AgeBreakdown: Identifiable {
         let option_id: UUID
         var teens: Int
@@ -366,18 +394,18 @@ enum PollAPI {
         var thirties: Int
         var forties: Int
         var fiftiesPlus: Int
-        var total: Int { teens + twenties + thirties + forties + fiftiesPlus }
+        var no_answer: Int
+        var total: Int { teens + twenties + thirties + forties + fiftiesPlus + no_answer }
         var id: UUID { option_id }
     }
 
-    /// 各選択肢ごとの年代内訳（10/20/30/40/50+）を取得します。
-    /// gender を指定した場合は、該当性別のみを集計します（nil なら全体）。
-    /// 既存コードへ影響しないように新規 API として追加。
+    /// 各選択肢ごとの年代内訳（10/20/30/40/50+ と 無回答）を取得します。
+    /// 返却は横持ち形式。votes.age_group_at_vote を用いる RPC を呼び出します。
     static func fetchAgeBreakdown(for pollID: UUID, gender: String? = nil) async throws -> [AgeBreakdown] {
-        // RPC: fetch_age_breakdown(_poll_id uuid)
+        // RPC: fetch_age_group_breakdown(_poll_id uuid)
         guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
-        comps.path = "/rest/v1/rpc/fetch_age_breakdown"
+        comps.path = "/rest/v1/rpc/fetch_age_group_breakdown"
         let url = comps.url!
 
         var req = URLRequest(url: url)
@@ -390,24 +418,83 @@ enum PollAPI {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+
+        // 🔍 デバッグログ（DEBUG ビルドのみ出力）
+        #if DEBUG
+        logger.debug("➡️ fetch_age_group_breakdown code=\(code, privacy: .public)")
+        if let s = String(data: data, encoding: .utf8) {
+            logger.debug("⬅️ body=\(s, privacy: .public)")
+        }
+        #endif
+
         guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
 
-        struct Row: Decodable {
+        // 1) prefer_not で返ってくる新定義に対応
+        struct RowPreferNot: Decodable {
             let option_id: UUID
             let teens: Int
             let twenties: Int
             let thirties: Int
             let forties: Int
-            let fiftiesplus: Int // 注意: Postgresは小文字
+            let fifties_plus: Int
+            let prefer_not: Int
         }
-        let rows = try JSONDecoder().decode([Row].self, from: data)
+        if let rows = try? JSONDecoder().decode([RowPreferNot].self, from: data) {
+            return rows.map { r in
+                AgeBreakdown(option_id: r.option_id,
+                             teens: r.teens,
+                             twenties: r.twenties,
+                             thirties: r.thirties,
+                             forties: r.forties,
+                             fiftiesPlus: r.fifties_plus,
+                             no_answer: r.prefer_not)
+            }
+        }
+
+        // 2) no_answer で返ってくる定義にも対応
+        struct RowNoAnswer: Decodable {
+            let option_id: UUID
+            let teens: Int
+            let twenties: Int
+            let thirties: Int
+            let forties: Int
+            let fifties_plus: Int
+            let no_answer: Int
+        }
+        if let rows = try? JSONDecoder().decode([RowNoAnswer].self, from: data) {
+            return rows.map { r in
+                AgeBreakdown(option_id: r.option_id,
+                             teens: r.teens,
+                             twenties: r.twenties,
+                             thirties: r.thirties,
+                             forties: r.forties,
+                             fiftiesPlus: r.fifties_plus,
+                             no_answer: r.no_answer)
+            }
+        }
+
+        // 3) camelCase で返ってくる場合の緩いデコード（任意）
+        struct LooseRow: Decodable {
+            let optionId: UUID
+            let teens: Int?
+            let twenties: Int?
+            let thirties: Int?
+            let forties: Int?
+            let fiftiesPlus: Int?
+            let preferNot: Int?
+            let noAnswer: Int?
+        }
+        let dec = JSONDecoder()
+        dec.keyDecodingStrategy = .convertFromSnakeCase
+        let rows = try dec.decode([LooseRow].self, from: data)
         return rows.map { r in
-            AgeBreakdown(option_id: r.option_id,
-                         teens: r.teens,
-                         twenties: r.twenties,
-                         thirties: r.thirties,
-                         forties: r.forties,
-                         fiftiesPlus: r.fiftiesplus)
+            AgeBreakdown(option_id: r.optionId,
+                         teens: r.teens ?? 0,
+                         twenties: r.twenties ?? 0,
+                         thirties: r.thirties ?? 0,
+                         forties: r.forties ?? 0,
+                         fiftiesPlus: r.fiftiesPlus ?? 0,
+                         no_answer: r.preferNot ?? r.noAnswer ?? 0)
         }
     }
 
@@ -595,7 +682,7 @@ enum PollAPI {
                 if let gNeeded = genderParam {
                     guard genderMap[r.user_id] == gNeeded else { continue }
                 }
-                // Age filters
+                // Age filters（現状 age を送受信しないため通常は未適用）
                 if let minA = ageMin {
                     guard let a = ageMap[r.user_id], a >= minA else { continue }
                 }
@@ -604,6 +691,7 @@ enum PollAPI {
                 }
                 counter[r.option_id, default: 0] += 1
             }
+            // 修正: $0.value を使用
             return counter.map { VoteResult(option_id: $0.key, count: $0.value) }
                 .sorted { $0.count > $1.count }
         }
@@ -638,18 +726,11 @@ enum PollAPI {
     }
 
     // MARK: - Filtered results (client-side fallback for filter UI)
-    /// フィルタUI用の簡易フィルタ。現状はクライアント側集計のため
-    /// サーバーへのクエリ条件には使っていません（将来 RPC 版へ切替予定）。
     struct ResultFilter: Encodable {
         var minAge: Int? = nil
         var maxAge: Int? = nil
-        var countryCode: String? = nil     // 例: "JP"
     }
 
-    /// フィルタ指定つきの結果取得（UI のための薄いラッパー）。
-    /// いまは既存の `fetchResults(for:)` を呼んで合計票数を同時に返すだけ。
-    /// 将来、サーバー側集計（RPC）に切り替える際は、ここで `filters` を使って
-    /// `fetchFilteredResults(pollID:filters:)` を呼ぶように差し替えます。
     static func fetchResults(pollID: UUID, filter: ResultFilter?) async throws -> (rows: [VoteResult], total: Int) {
         let rows = try await fetchResults(for: pollID, gender: nil)
         let total = rows.reduce(0) { $0 + $1.count }
@@ -676,10 +757,7 @@ enum PollAPI {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
-        if !(200...299).contains(code) {
-            // 失敗時は false を返すより、上層で扱いたいのでエラー化
-            throw URLError(.badServerResponse)
-        }
+        guard (200...299).contains(code) else { throw URLError(.badServerResponse) }
         struct Row: Decodable { let id: UUID }
         let rows = try JSONDecoder().decode([Row].self, from: data)
         return !rows.isEmpty
@@ -692,7 +770,6 @@ enum PollAPI {
     }
 
     // MARK: - Votes (user voted set / map with option label)
-    /// 指定の pollIDs のうち、ユーザーが投票済みの poll_id セットを取得します（バッジ用途）。
     static func fetchUserVoted(pollIDs: [UUID], userID: UUID) async throws -> Set<UUID> {
         guard !pollIDs.isEmpty else { return [] }
         guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
@@ -720,8 +797,7 @@ enum PollAPI {
         return Set(rows.map(\.poll_id))
     }
 
-    /// ユーザーが選んだ option のラベルまで含めて取得（一覧で「あなたの選択：◯◯」と出す用途）
-    /// 返り値: pollID -> (optionID, optionLabel?)
+    /// ユーザーが選んだ option のラベルまで含めて取得
     static func fetchUserVoteDetailMap(pollIDs: [UUID], userID: UUID) async throws -> [UUID: (UUID, String?)] {
         guard !pollIDs.isEmpty else { return [:] }
         guard let base = URL(string: AppConfig.supabaseURL) else { return [:] }
@@ -809,7 +885,6 @@ enum PollAPI {
     }
 
     // MARK: - Options
-    /// 選択肢一覧を取得
     static func fetchOptions(for pollID: UUID) async throws -> [PollOption] {
         guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
@@ -834,8 +909,6 @@ enum PollAPI {
     }
 
     // MARK: - Post a poll
-    /// 質問・カテゴリ・選択肢（文字列配列）で Poll を作成
-    /// 成功時は作成された Poll の id を返す
     static func createPoll(question: String,
                            category: String,
                            options: [String],
@@ -929,7 +1002,6 @@ enum PollAPI {
     }
 
     // MARK: - Soft delete (set deleted_at)
-    /// 自分の投稿をソフト削除（deleted_at を現在時刻でセット）
     static func softDeleteOwnPoll(pollID: UUID) async throws {
         guard let base = URL(string: AppConfig.supabaseURL) else { throw URLError(.badURL) }
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
@@ -958,6 +1030,9 @@ enum PollAPI {
 
     // MARK: - Vote (RPC: submit_vote)
     static func submitVote(pollID: UUID, optionID: UUID, userID: UUID) async throws {
+        // ✅ FK対策: votes.user_id -> users.id を満たすため、先に users 行を作成（既存なら何もしない）
+        try await ensureUserExists(userID: userID)
+
         guard let base = URL(string: AppConfig.supabaseURL) else { return }
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
         comps.path = "/rest/v1/rpc/submit_vote"
@@ -973,18 +1048,26 @@ enum PollAPI {
             "_option_id": optionID.uuidString.uppercased(),
             "_user_id": userID.uuidString.uppercased()
         ]
-        req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        let bodyData = try JSONSerialization.data(withJSONObject: body, options: [])
+        req.httpBody = bodyData
 
-        let (_, resp) = try await URLSession.shared.data(for: req)
+        // 送信前ログ
+        print("➡️ submit_vote URL=\(url.absoluteString)")
+        print("➡️ submit_vote headers: apikey set, auth bearer set, content-type=application/json")
+        print("➡️ submit_vote body JSON=\(String(data: bodyData, encoding: .utf8) ?? "")")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        let bodyStr = String(data: data, encoding: .utf8) ?? ""
+        print("⬅️ submit_vote response code=\(code) body=\(bodyStr)")
+
         if !(200...299).contains(code) {
-            throw URLError(.badServerResponse)
+            // 409（重複投票など）や 400（パラメータ不一致）、404（関数未登録）などの本文をそのまま返す
+            throw HTTPError(statusCode: code, body: bodyStr)
         }
     }
 
     // MARK: - Compatibility / Enhanced fetch
-    /// Polls を取得（デフォルト: 最新順）。category を指定すると eq.<key> で絞り込み。
-    /// 既存呼び出しは `limit` だけでも動作します（order/category はデフォルト）。
     static func fetchPolls(limit: Int = 20,
                            order: String = "created_at.desc",
                            category: String? = nil) async throws -> [Poll] {
@@ -1044,7 +1127,6 @@ enum PollAPI {
     }
 
     // MARK: - Reports
-    /// 通報を送信（Edge Function経由）
     static func submitReport(
         pollID: UUID,
         reporterUserID: UUID,
@@ -1083,7 +1165,6 @@ enum PollAPI {
     }
 
     // MARK: - Likes
-    /// いいね（重複は成功扱いにする）
     static func like(pollID: UUID, userID: UUID) async throws {
         guard let base = URL(string: AppConfig.supabaseURL) else { return }
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
@@ -1164,7 +1245,7 @@ enum PollAPI {
 
         // サーバーからは { poll_id } の配列だけを受け取り、端末でカウント
         struct Row: Decodable { let poll_id: UUID }
-        let rows = try JSONDecoder().decode([Row].self, from: data)
+        let rows = try JSONDecoder.iso8601.decode([Row].self, from: data)
 
         var result: [UUID: Int] = [:]
         for r in rows { result[r.poll_id, default: 0] += 1 }
@@ -1201,7 +1282,6 @@ enum PollAPI {
     }
     // MARK: - My content helpers
     // --- Voted polls helpers (IDs -> Polls) ---
-    /// そのユーザーが投票した poll_id 一覧を取得（重複除外）
     static func fetchVotedPollIDs(userID: UUID, limit: Int = 200) async throws -> [UUID] {
         guard let base = URL(string: AppConfig.supabaseURL) else { return [] }
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
@@ -1346,4 +1426,3 @@ enum PollAPI {
         return try JSONDecoder().decode([Poll].self, from: data)
     }
 }
-

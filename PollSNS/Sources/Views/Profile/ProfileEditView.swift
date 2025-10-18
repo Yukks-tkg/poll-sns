@@ -40,9 +40,8 @@ struct ProfileEditView: View {
     @State private var selectedAvatar: String = "👶"
     @State private var nickname: String = ""
     @State private var gender: Gender? = nil
-    @State private var age: Int? = nil
     @State private var region: String? = nil
-    @State private var ageGroup: String? = nil   // 追加: 年代（"10代" 等）
+    @State private var ageGroup: String? = nil   // 年代（"10代" 等）
 
     @State private var didPreload = false
 
@@ -76,11 +75,8 @@ struct ProfileEditView: View {
     private var canSave: Bool {
         nicknameError == nil
         && gender != nil
-        && age != nil
         && region != nil
         && ageGroup != nil
-        && (age ?? 0) >= 13
-        && (age ?? 0) <= 99
     }
 
     private var isInitialSetup: Bool {
@@ -117,6 +113,7 @@ struct ProfileEditView: View {
                     .autocorrectionDisabled(true)
             }
 
+            // 並び順: 性別 → 年代 → 地域
             Section(header: Text("性別"), footer: genderFooter) {
                 Picker("性別", selection: $gender) {
                     Text("未設定").tag(Gender?.none)
@@ -127,14 +124,14 @@ struct ProfileEditView: View {
                 .pickerStyle(.segmented)
             }
 
-            Section(header: Text("年齢"), footer: ageFooter) {
-                Picker("年齢", selection: Binding(
-                    get: { age ?? -1 },
-                    set: { newValue in age = (newValue == -1 ? nil : newValue) }
+            Section(header: Text("年代"), footer: ageGroupFooter) {
+                Picker("年代", selection: Binding(
+                    get: { ageGroup ?? "" },
+                    set: { ageGroup = $0.isEmpty ? nil : $0 }
                 )) {
-                    Text("未設定").tag(-1)
-                    ForEach(13...99, id: \.self) { v in
-                        Text("\(v)歳").tag(v)
+                    Text("未設定").tag("")
+                    ForEach(ageGroups, id: \.self) { g in
+                        Text(g).tag(g)
                     }
                 }
             }
@@ -147,19 +144,6 @@ struct ProfileEditView: View {
                     Text("未設定").tag("")
                     ForEach(regions, id: \.self) { r in
                         Text(r).tag(r)
-                    }
-                }
-            }
-
-            // 追加: 年代（地域と同じ構成）
-            Section(header: Text("年代"), footer: ageGroupFooter) {
-                Picker("年代", selection: Binding(
-                    get: { ageGroup ?? "" },
-                    set: { ageGroup = $0.isEmpty ? nil : $0 }
-                )) {
-                    Text("未設定").tag("")
-                    ForEach(ageGroups, id: \.self) { g in
-                        Text(g).tag(g)
                     }
                 }
             }
@@ -178,10 +162,24 @@ struct ProfileEditView: View {
             }
         }
         .task {
-            if !didPreload {
-                await preload()
-                didPreload = true
+            // 起動時に必ず匿名サインインを待つ
+            try? await SupabaseManager.shared.ensureSignedIn()
+            do {
+                // RPC で profiles 行を必ず用意して取得
+                let profile = try await PollAPI.ensureProfileExists()
+                await MainActor.run {
+                    apply(profile: profile)
+                    didPreload = true
+                }
+            } catch {
+                print("preload error: \(error)")
+                // 失敗時は従来の preload へフォールバック（任意）
+                if !didPreload {
+                    await preload()
+                    didPreload = true
+                }
             }
+
             // 初回セットアップ時のみ、一度だけモーダルを表示
             if isInitialSetup && !didShowIntro {
                 showIntroModal = true
@@ -196,9 +194,8 @@ struct ProfileEditView: View {
                     Text("アンケート結果の正確性を高めるため、プロフィールの内容はできるだけ正確にご入力ください。")
                     Text("・ニックネーム（本名・絵文字不可）")
                     Text("・性別")
-                    Text("・年齢（13〜99歳）")
-                    Text("・地域")
                     Text("・年代")
+                    Text("・地域")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundColor(.secondary)
@@ -239,13 +236,6 @@ struct ProfileEditView: View {
     }
 
     @ViewBuilder
-    private var ageFooter: some View {
-        if age == nil {
-            Text("年齢を選択してください").foregroundColor(.red).font(.footnote)
-        }
-    }
-
-    @ViewBuilder
     private var regionFooter: some View {
         if region == nil {
             Text("地域を選択してください").foregroundColor(.red).font(.footnote)
@@ -260,11 +250,10 @@ struct ProfileEditView: View {
     }
 
     private func save() {
-        guard let g = gender, let a = age, let r = region, let ag = ageGroup else { return }
+        guard let g = gender, let r = region, let ag = ageGroup else { return }
         let input = PollAPI.ProfileInput(
             display_name: nickname,
             gender: g.rawValue,
-            age: a,
             icon_emoji: selectedAvatar,
             region: r,
             age_group: ag
@@ -289,6 +278,7 @@ struct ProfileEditView: View {
         }
     }
 
+    // 旧来のプリロード（フォールバック用に残す）
     private func preload() async {
         if let p = initialProfile {
             await MainActor.run { apply(profile: p) }
@@ -309,7 +299,6 @@ struct ProfileEditView: View {
     private func apply(profile p: PollAPI.UserProfile) {
         if let emoji = p.avatar_value, !emoji.isEmpty { selectedAvatar = emoji }
         nickname = p.username
-        if let a = p.age { age = a } else { age = nil }
         if let g = p.gender, let choice = Gender(rawValue: g) { gender = choice } else { gender = nil }
         if let r = p.region, !r.isEmpty { region = r } else { region = nil }
         if let ag = p.age_group, !ag.isEmpty { ageGroup = ag } else { ageGroup = nil }

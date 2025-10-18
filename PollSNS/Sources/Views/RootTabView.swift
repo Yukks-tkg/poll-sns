@@ -147,9 +147,14 @@ struct RootTabView: View {
         // 未設定ならフルスクリーンで編集を強制表示
         .fullScreenCover(isPresented: $mustSetupProfile) {
             NavigationStack {
-                ProfileEditView(userID: AppConfig.currentUserID, initialProfile: nil) { _ in
-                    // 保存完了時に再チェック（成功していれば閉じる）
-                    Task { await checkProfileIfNeeded() }
+                ProfileEditView(userID: AppConfig.currentUserID, initialProfile: nil) { saved in
+                    // 1) まず確実に閉じる（ユーザー体験優先）
+                    Task { @MainActor in setMustSetup(false) }
+                    // 2) 少し待ってからサーバー再チェック（反映遅延対策）
+                    Task {
+                        try? await Task.sleep(nanoseconds: 400_000_000) // 0.4s
+                        await checkProfileIfNeeded()
+                    }
                 }
             }
             .interactiveDismissDisabled(true) // スワイプで閉じられないように
@@ -159,7 +164,7 @@ struct RootTabView: View {
             SettingsSheet(
                 onClose: { showSettings = false },
                 onProfileEdited: { _ in
-                    // 保存後に必要なら再チェック
+                    // 保存後に必要なら再チェック（設定シートは強制ではないので即閉じでOK）
                     Task { await checkProfileIfNeeded() }
                 }
             )

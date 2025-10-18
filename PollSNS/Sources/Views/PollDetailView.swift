@@ -293,6 +293,7 @@ struct PollDetailView: View {
         }
     }
 
+    // 年代用の積み上げバー（無回答追加）
     private struct ResultBarStackedAge: View {
         let label: String
         let teens: Int
@@ -300,14 +301,16 @@ struct PollDetailView: View {
         let thirties: Int
         let forties: Int
         let fiftiesPlus: Int
+        let no_answer: Int
         let grandTotal: Int
-        var total: Int { teens + twenties + thirties + forties + fiftiesPlus }
+        var total: Int { teens + twenties + thirties + forties + fiftiesPlus + no_answer }
 
         private let c10 = Color.blue
         private let c20 = Color.teal
         private let c30 = Color.green
         private let c40 = Color.orange
         private let c50 = Color.pink
+        private let cNoAnswer = Color.gray
 
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
@@ -327,6 +330,7 @@ struct PollDetailView: View {
                     let w30 = total > 0 ? w * CGFloat(thirties)    / CGFloat(total) : 0
                     let w40 = total > 0 ? w * CGFloat(forties)     / CGFloat(total) : 0
                     let w50 = total > 0 ? w * CGFloat(fiftiesPlus) / CGFloat(total) : 0
+                    let wNA = total > 0 ? w * CGFloat(no_answer)   / CGFloat(total) : 0
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color(.systemGray5))
                         HStack(spacing: 0) {
@@ -335,6 +339,7 @@ struct PollDetailView: View {
                             Capsule().fill(c30).frame(width: w30)
                             Capsule().fill(c40).frame(width: w40)
                             Capsule().fill(c50).frame(width: w50)
+                            Capsule().fill(cNoAnswer).frame(width: wNA)
                         }
                     }
                 }
@@ -345,11 +350,12 @@ struct PollDetailView: View {
                         ScrollView(.horizontal, showsIndicators: true) {
                             HStack(spacing: 12) {
                                 let denom = total > 0 ? Double(total) : 0
-                                let p10 = (denom > 0 ? Double(teens) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
-                                let p20 = (denom > 0 ? Double(twenties) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
-                                let p30 = (denom > 0 ? Double(thirties) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
-                                let p40 = (denom > 0 ? Double(forties) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let p10 = (denom > 0 ? Double(teens)       / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let p20 = (denom > 0 ? Double(twenties)    / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let p30 = (denom > 0 ? Double(thirties)    / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let p40 = (denom > 0 ? Double(forties)     / denom : 0).formatted(.percent.precision(.fractionLength(0)))
                                 let p50 = (denom > 0 ? Double(fiftiesPlus) / denom : 0).formatted(.percent.precision(.fractionLength(0)))
+                                let pNA = (denom > 0 ? Double(no_answer)   / denom : 0).formatted(.percent.precision(.fractionLength(0)))
 
                                 Label("10代 \(p10) (\(teens)票)", systemImage: "square.fill")
                                     .foregroundStyle(c10).font(.caption2)
@@ -365,6 +371,9 @@ struct PollDetailView: View {
                                     .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                                 Label("50代以上 \(p50) (\(fiftiesPlus)票)", systemImage: "square.fill")
                                     .foregroundStyle(c50).font(.caption2)
+                                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Label("無回答 \(pNA) (\(no_answer)票)", systemImage: "square.fill")
+                                    .foregroundStyle(cNoAnswer).font(.caption2)
                                     .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                             }
                             .padding(.trailing, 24)
@@ -794,6 +803,7 @@ struct PollDetailView: View {
                         thirties: ab?.thirties ?? 0,
                         forties: ab?.forties ?? 0,
                         fiftiesPlus: ab?.fiftiesPlus ?? 0,
+                        no_answer: ab?.no_answer ?? 0,
                         grandTotal: totalVotes
                     )
                 }
